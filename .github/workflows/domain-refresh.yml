@@ -1,0 +1,49 @@
+name: Provider Domain Refresh
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Alan adlarını ara ve doğrudan doğrula
+        run: node scripts/refresh-domains.js
+
+      - name: Doğrulanmış değişiklikleri yayımla
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- domains.json; then
+            echo "Doğrulanmış alan adı değişikliği yok."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add domains.json
+          git commit -m "chore: alan adı kaydını otomatik güncelle"
+
+          if git push origin HEAD:main; then
+            echo "domains.json güncellendi."
+          else
+            branch="auto/domain-registry-${GITHUB_RUN_NUMBER}"
+            git checkout -b "$branch"
+            git push origin "$branch"
+            gh pr create \
+              --title "chore: alan adı kaydını otomatik güncelle" \
+              --body "Günlük alan adı araması yalnızca doğrudan doğrulanan adayları kayda aldı." \
+              || true
+          fi
