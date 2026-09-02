@@ -8,7 +8,7 @@ const vm = require("node:vm");
 const root = path.resolve(__dirname, "..");
 const manifestPath = path.join(root, "manifest.json");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-assert.equal(manifest.version, "2.10.0");
+assert.equal(manifest.version, "2.11.0");
 assert.ok(Array.isArray(manifest.scrapers) && manifest.scrapers.length > 0);
 
 const manifestFiles = new Set();
@@ -42,5 +42,15 @@ assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /fullHdProbeMediaUr
 assert.match(read("providers/dizibox-1.0.5.js"), /reklam\|reklamlar/);
 assert.match(read("providers/animelercc-1.0.6.js"), /playerTypeForUrl/);
 assert.ok(read("providers/animelercc-1.0.6.js").includes("application/vnd.apple.mpegurl"));
+
+assert.match(read("providers/filmmakinesi-1.0.0.js"), /SITE_ID = "filmmakinesi"/);
+assert.match(read("providers/720izle-1.0.0.js"), /hotAesDecrypt/);
+assert.match(read("providers/720izle-1.0.0.js"), /hlsLooksLikeLongMedia/);
+const domainRegistry = JSON.parse(read("domains.json"));
+for (const id of ["filmmakinesi", "720izle"]) {
+  assert.ok(domainRegistry.providers[id], "missing domain registry entry: " + id);
+  assert.ok(Array.isArray(domainRegistry.providers[id].domains) && domainRegistry.providers[id].domains.length > 0);
+  assert.ok(domainRegistry.providers[id].allowedHost);
+}
 
 console.log("provider verification passed: " + manifest.scrapers.length + " scrapers");

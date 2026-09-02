@@ -1,57 +1,126 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-02T14:00:00.000Z",
+  "updatedAt": "2026-09-02T20:30:00.000Z",
   "description": "Nuvio sağlayıcı alan adları. GitHub Actions doğrulanmış yeni alan adlarını günlük olarak arar.",
   "providers": {
     "animecix": {
-      "domains": ["https://animecix.tv"],
+      "domains": [
+        "https://animecix.tv"
+      ],
       "allowedHost": "^(?:www\\.)?animecix\\.[a-z]{2,}$",
-      "signatures": ["animecix"],
+      "signatures": [
+        "animecix"
+      ],
       "autoDiscover": true,
       "required": true,
       "status": "active"
     },
     "animexe": {
-      "domains": ["https://animexe.com"],
+      "domains": [
+        "https://animexe.com"
+      ],
       "allowedHost": "^(?:www\\.)?animexe\\.com$",
-      "signatures": ["animexe"],
+      "signatures": [
+        "animexe"
+      ],
       "autoDiscover": false,
       "required": true,
       "status": "active"
     },
     "animelercc": {
-      "domains": ["https://animeler.cc"],
+      "domains": [
+        "https://animeler.cc"
+      ],
       "allowedHost": "^(?:www\\.)?animeler\\.cc$",
-      "signatures": ["animeler"],
+      "signatures": [
+        "animeler"
+      ],
       "autoDiscover": false,
       "required": true,
       "status": "active"
     },
     "dizibox": {
-      "domains": ["https://www.dizibox.now", "https://dizibox.now", "https://www.dizibox.live", "https://dizibox.live"],
+      "domains": [
+        "https://www.dizibox.now",
+        "https://dizibox.now",
+        "https://www.dizibox.live",
+        "https://dizibox.live"
+      ],
       "allowedHost": "^(?:www\\.)?dizibox\\.(?:now|live)$",
-      "signatures": ["dizibox"],
+      "signatures": [
+        "dizibox"
+      ],
       "autoDiscover": false,
       "required": false,
       "status": "blocked-cloudflare"
     },
     "hdfilmcehennemi": {
-      "domains": ["https://www.hdfilmcehennemi.nl", "https://hdfilmcehennemi.nl", "https://hdfilmcehennemini.com", "https://www.hdfilmcehennemini.com", "https://www.hdfilmcehennemi.ws", "https://hdfilmcehennemi.ws"],
+      "domains": [
+        "https://www.hdfilmcehennemi.nl",
+        "https://hdfilmcehennemi.nl",
+        "https://hdfilmcehennemini.com",
+        "https://www.hdfilmcehennemini.com",
+        "https://www.hdfilmcehennemi.ws",
+        "https://hdfilmcehennemi.ws"
+      ],
       "allowedHost": "^(?:www\\.)?hdfilmcehennemi(?:ni)?\\.[a-z]{2,}$",
-      "signatures": ["hdfilmcehennemi"],
-      "searchQueries": ["HDFilmCehennemi güncel adres", "HDFilmCehennemi yeni adres"],
+      "signatures": [
+        "hdfilmcehennemi"
+      ],
+      "searchQueries": [
+        "HDFilmCehennemi güncel adres",
+        "HDFilmCehennemi yeni adres"
+      ],
       "autoDiscover": true,
       "required": false,
       "status": "blocked-cloudflare"
     },
     "fullhdfilmizlesenow": {
-      "domains": ["https://www.fullhdfilmizlesene.now"],
+      "domains": [
+        "https://www.fullhdfilmizlesene.now"
+      ],
       "allowedHost": "^(?:www\\.)?fullhdfilmizlesene\\.[a-z]{2,}$",
-      "signatures": ["fullhdfilmizlesene"],
-      "searchQueries": ["FullHDFilmizlesene güncel adres", "FullHDFilmizlesene yeni adres"],
+      "signatures": [
+        "fullhdfilmizlesene"
+      ],
+      "searchQueries": [
+        "FullHDFilmizlesene güncel adres",
+        "FullHDFilmizlesene yeni adres"
+      ],
       "autoDiscover": true,
       "required": false,
       "status": "blocked-cloudflare"
+    },
+    "filmmakinesi": {
+      "domains": [
+        "https://filmmakinesi.to",
+        "https://www.filmmakinesi.to"
+      ],
+      "allowedHost": "^(?:www\\.)?filmmakinesi\\.to$",
+      "signatures": [
+        "filmmakinesi"
+      ],
+      "searchQueries": [
+        "FilmMakinesi güncel adres",
+        "FilmMakinesi yeni adres"
+      ],
+      "autoDiscover": false,
+      "required": false,
+      "status": "blocked-cloudflare"
+    },
+    "720izle": {
+      "domains": [
+        "https://720izle.com",
+        "https://www.720izle.com"
+      ],
+      "allowedHost": "^(?:www\\.)?720izle\\.com$",
+      "signatures": [
+        "720izle",
+        "720pizle"
+      ],
+      "autoDiscover": false,
+      "required": false,
+      "status": "active"
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "Animecix Nuvio",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "scrapers": [
     {
       "id": "animecix",
@@ -8,13 +8,21 @@
       "description": "Animecix.tv için güncel Türkçe anime video sağlayıcısı",
       "version": "2.5.0",
       "author": "aojin76",
-      "supportedTypes": ["movie", "tv"],
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
       "filename": "providers/animecix-2.5.0.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://animecix.tv/favicon.ico",
-      "contentLanguage": ["tr"],
-      "formats": ["mp4", "m3u8"],
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4",
+        "m3u8"
+      ],
       "limited": false,
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
@@ -25,13 +33,20 @@
       "description": "Animexe.com için Türkçe anime video sağlayıcısı",
       "version": "1.0.3",
       "author": "aojin76",
-      "supportedTypes": ["tv"],
+      "supportedTypes": [
+        "tv"
+      ],
       "filename": "providers/animexe-1.0.3.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://animexe.com/favicon.png",
-      "contentLanguage": ["tr"],
-      "formats": ["mp4", "m3u8"],
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4",
+        "m3u8"
+      ],
       "limited": false,
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
@@ -42,13 +57,19 @@
       "description": "Animeler.cc için Türkçe anime video sağlayıcısı",
       "version": "1.0.6",
       "author": "aojin76",
-      "supportedTypes": ["tv"],
+      "supportedTypes": [
+        "tv"
+      ],
       "filename": "providers/animelercc-1.0.6.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://animeler.cc/favicon.ico",
-      "contentLanguage": ["tr"],
-      "formats": ["mp4"],
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4"
+      ],
       "limited": false,
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
@@ -59,13 +80,20 @@
       "description": "DiziBox yabancı dizi kaynağı; erişim Cloudflare veya IP kısıtına bağlı olabilir",
       "version": "1.0.5",
       "author": "aojin76",
-      "supportedTypes": ["tv"],
+      "supportedTypes": [
+        "tv"
+      ],
       "filename": "providers/dizibox-1.0.5.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://www.dizibox.now/favicon.ico",
-      "contentLanguage": ["tr"],
-      "formats": ["mp4", "m3u8"],
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4",
+        "m3u8"
+      ],
       "limited": true,
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
@@ -76,13 +104,21 @@
       "description": "HDFilmCehennemi film ve dizi kaynağı; alan adı otomatik yenilenir",
       "version": "1.0.5",
       "author": "aojin76",
-      "supportedTypes": ["movie", "tv"],
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
       "filename": "providers/hdfilmcehennemi-1.0.5.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://www.hdfilmcehennemi.nl/favicon.ico",
-      "contentLanguage": ["tr"],
-      "formats": ["mp4", "m3u8"],
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4",
+        "m3u8"
+      ],
       "limited": true,
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
@@ -93,13 +129,70 @@
       "description": "FullHDFilmizlesene.now film kaynağı; alan adı otomatik yenilenir",
       "version": "1.0.1",
       "author": "aojin76",
-      "supportedTypes": ["movie"],
+      "supportedTypes": [
+        "movie"
+      ],
       "filename": "providers/fullhdfilmizlesenow-1.0.1.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://www.fullhdfilmizlesene.now/favicon.ico",
-      "contentLanguage": ["tr"],
-      "formats": ["mp4", "m3u8"],
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4",
+        "m3u8"
+      ],
+      "limited": true,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "filmmakinesi",
+      "name": "FilmMakinesi",
+      "description": "FilmMakinesi.to film ve dizi kaynağı; Cloudflare veya bölgesel erişim kısıtı olabilir",
+      "version": "1.0.0",
+      "author": "aojin76",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/filmmakinesi-1.0.0.js",
+      "enabled": true,
+      "hasSettings": true,
+      "logo": "https://filmmakinesi.to/favicon.ico",
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4",
+        "m3u8"
+      ],
+      "limited": true,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "720izle",
+      "name": "720izle",
+      "description": "720izle.com film ve dizi kaynağı; Hotstream HLS oynatıcısı",
+      "version": "1.0.0",
+      "author": "aojin76",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/720izle-1.0.0.js",
+      "enabled": true,
+      "hasSettings": true,
+      "logo": "https://720izle.com/wp-content/uploads/2025/09/cropped-icons8-popcorn-50-32x32.png",
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4",
+        "m3u8"
+      ],
       "limited": true,
       "disabledPlatforms": [],
       "supportsExternalPlayer": true
