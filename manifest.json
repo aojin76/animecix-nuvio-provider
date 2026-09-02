@@ -1,12 +1,12 @@
 {
   "name": "Animecix Nuvio",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "scrapers": [
     {
       "id": "animecix",
       "name": "Animecix",
       "description": "Animecix.tv için güncel Türkçe anime video sağlayıcısı",
-      "version": "2.3.0",
+      "version": "2.3.1",
       "author": "aojin76",
       "supportedTypes": [
         "movie",
