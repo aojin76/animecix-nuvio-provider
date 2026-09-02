@@ -1,6 +1,6 @@
 /**
  * animecix - Built from src/animecix/
- * Generated: 2026-09-02T09:35:39.075Z
+ * Generated: 2026-09-02T10:07:51.716Z
  */
 var __async = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -27,7 +27,9 @@ var __async = (__this, __arguments, generator) => {
 var ANIMECIX = "https://animecix.tv";
 var TAU_VIDEO = "https://tau-video.xyz";
 var TMDB = "https://api.themoviedb.org/3";
-var PROVIDER_VERSION = "2.1.1";
+var EPISODE_MAPPING = "https://id-mapping-api-malid.hf.space/api/resolve";
+var PROVIDER_VERSION = "2.2.0";
+var BLEACH_SEASON_COUNTS = [20, 21, 22, 28, 18, 22, 20, 16, 22, 16, 7, 17, 36, 51, 26, 24];
 function getTmdbKeys() {
   var keys = [];
   try {
@@ -128,18 +130,36 @@ function getTmdbTitle(tmdbId, mediaType) {
     var keys = getTmdbKeys();
     for (var i = 0; i < keys.length; i++) {
       try {
-        var url = TMDB + "/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?api_key=" + encodeURIComponent(keys[i]);
+        var url = TMDB + "/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?api_key=" + encodeURIComponent(keys[i]) + "&append_to_response=external_ids";
         var data = yield fetchJson(url, 2e4);
         if (!data)
           continue;
         var title = data.name || data.title || data.original_name || data.original_title || "";
         var original = data.original_name || data.original_title || "";
-        if (title || original)
-          return { title: String(title), original: String(original) };
+        var imdbId = data.external_ids && data.external_ids.imdb_id ? String(data.external_ids.imdb_id) : "";
+        if (title || original) {
+          return { title: String(title), original: String(original), imdbId };
+        }
       } catch (_) {
       }
     }
     return null;
+  });
+}
+function getEpisodeMapping(imdbId, season, episode) {
+  return __async(this, null, function* () {
+    if (!imdbId)
+      return null;
+    try {
+      var url = EPISODE_MAPPING + "?id=" + encodeURIComponent(String(imdbId)) + "&s=" + encodeURIComponent(String(season)) + "&e=" + encodeURIComponent(String(episode));
+      var data = yield fetchJson(url, 6e3);
+      var absoluteEpisode = data && parseInt(data.mal_episode, 10);
+      if (!absoluteEpisode || absoluteEpisode < 1)
+        return null;
+      return { season: 1, episode: absoluteEpisode };
+    } catch (_) {
+      return null;
+    }
   });
 }
 function searchAnime(query) {
@@ -188,6 +208,38 @@ function isExactTitleMatch(requested, result) {
       return true;
   }
   return false;
+}
+function isBleach(tmdbId, info) {
+  if (String(tmdbId) === "30984")
+    return true;
+  return normalize(info && info.title) === "bleach" || normalize(info && info.original) === "bleach";
+}
+function getBleachAbsoluteEpisode(season, episode) {
+  var s = parseInt(season, 10) || 1;
+  var e = parseInt(episode, 10) || 1;
+  if (s < 1 || s > BLEACH_SEASON_COUNTS.length || e < 1 || e > BLEACH_SEASON_COUNTS[s - 1]) {
+    return null;
+  }
+  var offset = 0;
+  for (var i = 0; i < s - 1; i++)
+    offset += BLEACH_SEASON_COUNTS[i];
+  return offset + e;
+}
+function getSourceEpisode(tmdbId, info, season, episode, mapped) {
+  var s = parseInt(season, 10) || 1;
+  var e = parseInt(episode, 10) || 1;
+  if (isBleach(tmdbId, info)) {
+    if (s >= 1 && s <= BLEACH_SEASON_COUNTS.length) {
+      var absolute = mapped && mapped.episode ? mapped.episode : getBleachAbsoluteEpisode(s, e);
+      if (absolute)
+        return { season: 1, episode: absolute };
+    }
+    if (s === 17)
+      return { season: 2, episode: e };
+    if (s === 2 && e > BLEACH_SEASON_COUNTS[1])
+      return { season: 2, episode: e };
+  }
+  return { season: s, episode: e };
 }
 function findAnime(tmdbId, title, original) {
   return __async(this, null, function* () {
@@ -285,12 +337,12 @@ function getTauStreams(tauId, animeTitle, episodeLabel, translator) {
     }
   });
 }
-function resolveEpisode(animeId, season, episode, animeTitle) {
+function resolveEpisode(animeId, season, episode, animeTitle, displayLabel) {
   return __async(this, null, function* () {
     var sources = yield getEpisodeVideos(animeId, season, episode);
     var streams = [];
     var seen = [];
-    var label = "B\xF6l\xFCm " + String(episode);
+    var label = displayLabel || "B\xF6l\xFCm " + String(episode);
     var requests = [];
     for (var i = 0; i < sources.length; i++) {
       var source = sources[i] || {};
@@ -318,16 +370,26 @@ function getStreams(tmdbId, mediaType, season, episode) {
         console.error("[Animecix] TMDB ba\u015Fl\u0131\u011F\u0131 al\u0131namad\u0131; API ayar\u0131n\u0131 veya uygulama TMDB anahtar\u0131n\u0131 kontrol et");
         return [];
       }
-      var anime = yield findAnime(tmdbId, info.title, info.original);
+      var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
+      var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
+      var lookup = yield Promise.all([
+        findAnime(tmdbId, info.title, info.original),
+        mediaType === "movie" ? Promise.resolve(null) : getEpisodeMapping(info.imdbId, s, e)
+      ]);
+      var anime = lookup[0];
+      var mapped = lookup[1];
       if (!anime || !anime.id) {
         console.log("[Animecix] Animecix e\u015Fle\u015Fmesi yok: " + info.title);
         return [];
       }
-      var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
-      var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
       var title = anime.name || info.title;
-      var streams = yield resolveEpisode(anime.id, s, e, title);
-      console.log("[Animecix] " + title + " S" + String(s) + "E" + String(e) + " -> " + String(streams.length) + " stream");
+      var sourceEpisode = getSourceEpisode(tmdbId, info, s, e, mapped);
+      var displayLabel = mediaType === "movie" ? "Film" : "S" + String(s) + "B" + String(e);
+      var streams = yield resolveEpisode(anime.id, sourceEpisode.season, sourceEpisode.episode, title, displayLabel);
+      if (!streams.length && mapped && (sourceEpisode.season !== mapped.season || sourceEpisode.episode !== mapped.episode)) {
+        streams = yield resolveEpisode(anime.id, mapped.season, mapped.episode, title, displayLabel);
+      }
+      console.log("[Animecix] " + title + " S" + String(s) + "E" + String(e) + " -> kaynak S" + String(sourceEpisode.season) + "E" + String(sourceEpisode.episode) + " -> " + String(streams.length) + " stream");
       return streams;
     } catch (_) {
       return [];
