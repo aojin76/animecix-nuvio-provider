@@ -1,6 +1,6 @@
 /**
  * animecix - Built from src/animecix/
- * Generated: 2026-09-02T10:07:51.716Z
+ * Generated: 2026-09-02T10:10:45.875Z
  */
 var __async = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -385,11 +385,14 @@ function getStreams(tmdbId, mediaType, season, episode) {
       var title = anime.name || info.title;
       var sourceEpisode = getSourceEpisode(tmdbId, info, s, e, mapped);
       var displayLabel = mediaType === "movie" ? "Film" : "S" + String(s) + "B" + String(e);
+      var resolvedSource = sourceEpisode;
       var streams = yield resolveEpisode(anime.id, sourceEpisode.season, sourceEpisode.episode, title, displayLabel);
       if (!streams.length && mapped && (sourceEpisode.season !== mapped.season || sourceEpisode.episode !== mapped.episode)) {
         streams = yield resolveEpisode(anime.id, mapped.season, mapped.episode, title, displayLabel);
+        if (streams.length)
+          resolvedSource = mapped;
       }
-      console.log("[Animecix] " + title + " S" + String(s) + "E" + String(e) + " -> kaynak S" + String(sourceEpisode.season) + "E" + String(sourceEpisode.episode) + " -> " + String(streams.length) + " stream");
+      console.log("[Animecix] " + title + " S" + String(s) + "E" + String(e) + " -> kaynak S" + String(resolvedSource.season) + "E" + String(resolvedSource.episode) + " -> " + String(streams.length) + " stream");
       return streams;
     } catch (_) {
       return [];
