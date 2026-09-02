@@ -19,7 +19,8 @@ var DEFAULT_DOMAIN_CANDIDATES = [
 ];
 var REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
 var TMDB_URL = "https://api.themoviedb.org/3";
-var PROVIDER_VERSION = "1.0.3";
+var PROVIDER_VERSION = "1.0.4";
+var RESOLVE_TIMEOUT_MS = 45000;
 var DEFAULT_TMDB_API_KEY = "";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 var PAGE_HEADERS = {
@@ -284,13 +285,44 @@ function mergeHeaders(extra) {
   return headers;
 }
 
+// Katre/KSD player responses are sometimes returned as escaped JSON. Decode
+// those wrappers before looking for iframe and media attributes.
+function normalizePlayerText(value) {
+  var text = String(value || "");
+  try {
+    var data = JSON.parse(text);
+    if (data && typeof data === "object") {
+      text += "\n" + String(data.html || "") + "\n" + String(data.data || "") +
+        "\n" + String(data.content || "") + "\n" + String(data.body || "") +
+        "\n" + String(data.source || "") + "\n" + String(data.url || "");
+    }
+  } catch (_) {
+  }
+  return text
+    .replace(/\\u003c/gi, "<")
+    .replace(/\\u003e/gi, ">")
+    .replace(/\\u0022/gi, '"')
+    .replace(/\\u0027/gi, "'")
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\u([0-9a-f]{4})/gi, function(_, code) {
+      return String.fromCharCode(parseInt(code, 16));
+    })
+    .replace(/\\x([0-9a-f]{2})/gi, function(_, code) {
+      return String.fromCharCode(parseInt(code, 16));
+    })
+    .replace(/\\\//g, "/")
+    .replace(/\\"/g, '"')
+    .replace(/\\'/g, "'");
+}
+
 function extractIframeSrc(html, matcher, base) {
-  var source = String(html || "");
+  var source = normalizePlayerText(html);
   var re = /<(?:iframe|frame)\b([^>]*)>/gi;
   var match;
   while ((match = re.exec(source)) !== null) {
     var attrs = match[1] || "";
-    var srcMatch = attrs.match(/\b(?:src|data-src)\s*=\s*(["'])([\s\S]*?)\1/i);
+    var srcMatch = attrs.match(/\b(?:src|data-src|data-url|data-embed|data-player|data-href)\s*=\s*(["'])([\s\S]*?)\1/i);
     if (!srcMatch)
       continue;
     var src = htmlDecode(srcMatch[2]).replace(/\\\//g, "/");
@@ -303,12 +335,12 @@ function extractIframeSrc(html, matcher, base) {
 function extractIframeSources(html, base) {
   var result = [];
   var seen = {};
-  var source = String(html || "");
-  var re = /<(?:iframe|frame)\b([^>]*)>/gi;
+  var source = normalizePlayerText(html);
+  var re = /<(?:iframe|frame|embed|object)\b([^>]*)>/gi;
   var match;
   while ((match = re.exec(source)) !== null) {
     var attrs = match[1] || "";
-    var srcRe = /\b(?:src|data-src|data-iframe|data-embed)\s*=\s*(["'])([\s\S]*?)\1/gi;
+    var srcRe = /\b(?:src|data|data-src|data-iframe|data-embed|data-url|data-player|data-href)\s*=\s*(["'])([\s\S]*?)\1/gi;
     var srcMatch;
     while ((srcMatch = srcRe.exec(attrs)) !== null) {
       var url = absoluteUrl(srcMatch[2], base);
@@ -330,10 +362,11 @@ function streamObjects(urls, subtitles, referer, title) {
       continue;
     seen[url] = true;
     var type = sourceType(url);
+    var playableUrl = type === "m3u8" ? ensureHlsExtHint(url) : url;
     streams.push({
       name: "DiziBox • " + type.toUpperCase(),
       title: title,
-      url: url,
+      url: playableUrl,
       quality: "Auto",
       size: "Unknown",
       headers: {
@@ -350,12 +383,12 @@ function streamObjects(urls, subtitles, referer, title) {
 }
 
 function extractPlayableUrls(html, base) {
-  var source = String(html || "");
+  var source = normalizePlayerText(html);
   var encrypted = extractEncryptedPayload(source);
   if (encrypted && encrypted.ciphertext && encrypted.password) {
     var decrypted = decryptOpenSsl(encrypted.ciphertext, encrypted.password);
     if (decrypted)
-      source += "\n" + decrypted;
+      source += "\n" + normalizePlayerText(decrypted);
   }
   return {
     urls: sortMediaUrls(extractMediaUrls(source, base)),
@@ -364,7 +397,7 @@ function extractPlayableUrls(html, base) {
 }
 
 function resolveGenericPlayer(html, pageUrl, title, depth) {
-  var base = originOf(pageUrl);
+  var base = pageUrl || originOf(pageUrl);
   var parsed = extractPlayableUrls(html, base);
   return filterMediaUrls(parsed.urls, pageUrl).then(function(urls) {
     if (urls.length)
@@ -421,7 +454,16 @@ function extractTracks(html, base) {
 
 function sourceType(url) {
   var value = String(url || "");
-  return /\.m3u8(?:[?#]|$)|\/hls(?:[/?#]|$)/i.test(value) ? "m3u8" : "mp4";
+  return /\.m3u8(?:[?#]|$)|\/(?:hls|playlist|stream)(?:[/?#]|$)/i.test(value) ? "m3u8" : "mp4";
+}
+
+function ensureHlsExtHint(url) {
+  var value = String(url || "");
+  if (!value || !/^https?:\/\//i.test(value))
+    return value;
+  if (/\.m3u8(?:[?#]|$)|\.mp4(?:[?#]|$)|\.mkv(?:[?#]|$)/i.test(value))
+    return value;
+  return value + (value.indexOf("?") >= 0 ? "&" : "?") + "ext=video.m3u8";
 }
 
 var AD_MEDIA_URL_RE = /(?:^|[./?&#_=:\-])(?:ad|ads|advert|advertisement|banner|commercial|promo|preview|trailer|teaser|bumper|preroll|pre-roll|interstitial|sponsor|luxbet|peacock|casino|betting|countdown|splash|watermark|logo)(?:[./?&#_=:\-]|$)/i;
@@ -432,7 +474,7 @@ function isAdMediaUrl(url) {
 }
 
 function hasMediaPath(url) {
-  return /\.(?:m3u8|mp4)(?:[?#]|$)|\/(?:hls|playlist|stream|video)(?:[/?#]|$)/i.test(String(url || ""));
+  return /\.(?:m3u8|mp4|mkv)(?:[?#]|$)|\/(?:hls|playlist|stream|video)(?:[/?#]|$)/i.test(String(url || ""));
 }
 
 function mediaScore(url) {
@@ -440,7 +482,7 @@ function mediaScore(url) {
   if (isAdMediaUrl(value))
     return -1000;
   var score = 0;
-  if (/\.m3u8(?:[?#]|$)|\/hls(?:[/?#]|$)/i.test(value))
+  if (/\.m3u8(?:[?#]|$)|\/(?:hls|playlist|stream)(?:[/?#]|$)/i.test(value))
     score += 100;
   if (/\.mp4(?:[?#]|$)/i.test(value))
     score += 60;
@@ -466,7 +508,7 @@ function sortMediaUrls(urls) {
 }
 
 function extractMediaUrls(html, base) {
-  var source = String(html || "").replace(/\\\//g, "/");
+  var source = normalizePlayerText(html);
   var found = [];
   var seen = {};
   function add(raw, allowUnknownExtension) {
@@ -490,13 +532,17 @@ function extractMediaUrls(html, base) {
       add(attr[2], /video\//i.test(type) || hasMediaPath(attr[2]));
   }
   var patterns = [
-    /(?:file|source|videoUrl|video_url|contentUrl|playlist|hls|src)\s*[:=]\s*["']((?:https?:)?\/\/[^"'\\\s<>]+|\/[^"'\\\s<>]+)["']/gi,
+    /(?:^|[^A-Za-z0-9_-])["']?((?:file|fileUrl|source|videoUrl|video_url|contentUrl|playlist|hls|hlsUrl|m3u8|mp4|src|url))["']?\s*[:=]\s*["']((?:https?:)?\/\/[^"'\\\s<>]+|\/[^"'\\\s<>]+)["']/gi,
     /https?:\/\/[^"'\\\s<>]+\.(?:m3u8|mp4)(?:\?[^"'\\\s<>]*)?/gi
   ];
   for (var p = 0; p < patterns.length; p++) {
     var match;
-    while ((match = patterns[p].exec(source)) !== null)
-      add(match[1] || match[0], p === 0);
+    while ((match = patterns[p].exec(source)) !== null) {
+      var raw = p === 0 ? match[2] : match[0];
+      var key = p === 0 ? match[1] : "";
+      var allowUnknown = p === 0 && (!key || /^(?:file|fileurl|source|videourl|video_url|contenturl|playlist|hls|hlsurl|m3u8|mp4)$/i.test(key));
+      add(raw, allowUnknown && !isPlayerEndpointUrl(raw));
+    }
   }
   return sortMediaUrls(found);
 }
@@ -581,9 +627,18 @@ function probeMp4Url(url, referer) {
       var decision = assessMediaResponse(url, response);
       return decision === null ? true : decision;
     }).catch(function() {
-      return null;
+      // An embed/player endpoint that cannot be probed is usually HTML, not
+      // the episode file. Do not hand it to Nuvio as an MP4 fallback.
+      return isPlayerEndpointUrl(url) ? false : null;
     });
   });
+}
+
+function isPlayerEndpointUrl(url) {
+  var value = String(url || "");
+  if (/\.(?:m3u8|mp4|mkv)(?:[?#]|$)/i.test(value))
+    return false;
+  return /\/(?:embed|player|watch)(?:[/?#]|$)/i.test(value);
 }
 
 function filterMediaUrls(urls, referer) {
@@ -1068,7 +1123,7 @@ function resolveTarget(tmdbId, mediaType, season, episode) {
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
-  return resolveTarget(tmdbId, mediaType || "tv", season || 1, episode || 1).then(function(result) {
+  return withTimeout(resolveTarget(tmdbId, mediaType || "tv", season || 1, episode || 1), RESOLVE_TIMEOUT_MS, "DiziBox stream resolution").then(function(result) {
     return result && result.streams ? result.streams : [];
   }).catch(function() {
     return [];
@@ -1076,7 +1131,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
 }
 
 function getSubtitles(tmdbId, mediaType, season, episode) {
-  return resolveTarget(tmdbId, mediaType || "tv", season || 1, episode || 1).then(function(result) {
+  return withTimeout(resolveTarget(tmdbId, mediaType || "tv", season || 1, episode || 1), RESOLVE_TIMEOUT_MS, "DiziBox subtitle resolution").then(function(result) {
     return result && result.subtitles ? result.subtitles : [];
   }).catch(function() {
     return [];
