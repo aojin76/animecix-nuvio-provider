@@ -1,6 +1,6 @@
 /**
  * animecix - Built from src/animecix/
- * Generated: 2026-09-02T08:08:38.321Z
+ * Generated: 2026-09-02T08:27:58.245Z
  */
 var __async = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -38,14 +38,33 @@ function getTmdbKeys() {
     }
   } catch (_) {
   }
+  try {
+    if (typeof globalThis !== "undefined") {
+      var injected = globalThis.TMDB_API_KEY || globalThis.__TMDB_API_KEY;
+      if (injected && String(injected).trim())
+        keys.push(String(injected).trim());
+    }
+  } catch (_) {
+  }
   return keys;
 }
-function fetchJson(url, timeoutMs) {
+function fetchJson(url, timeoutMs, extraHeaders) {
   var timeout = timeoutMs || 15e3;
+  var headers = {
+    Accept: "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+  };
+  if (extraHeaders) {
+    for (var headerName in extraHeaders) {
+      if (Object.prototype.hasOwnProperty.call(extraHeaders, headerName)) {
+        headers[headerName] = extraHeaders[headerName];
+      }
+    }
+  }
   if (typeof setTimeout !== "function") {
-    return fetch(url).then(function(response) {
+    return fetch(url, { headers }).then(function(response) {
       if (!response || response.ok === false || response.status && response.status >= 400) {
-        throw new Error("HTTP error");
+        throw new Error("HTTP " + (response && response.status ? response.status : "error"));
       }
       return response.json();
     });
@@ -58,9 +77,9 @@ function fetchJson(url, timeoutMs) {
       settled = true;
       reject(new Error("Request timeout: " + url));
     }, timeout);
-    fetch(url).then(function(response) {
+    fetch(url, { headers }).then(function(response) {
       if (!response || response.ok === false || response.status && response.status >= 400) {
-        throw new Error("HTTP error");
+        throw new Error("HTTP " + (response && response.status ? response.status : "error"));
       }
       return response.json();
     }).then(function(data) {
@@ -154,6 +173,17 @@ function isTitleMatch(requested, result) {
   }
   return false;
 }
+function isExactTitleMatch(requested, result) {
+  var left = normalize(requested);
+  if (left.length < 3)
+    return false;
+  var names = resultNames(result);
+  for (var i = 0; i < names.length; i++) {
+    if (left === normalize(names[i]))
+      return true;
+  }
+  return false;
+}
 function findAnime(tmdbId, title, original) {
   return __async(this, null, function* () {
     var queries = uniqueValues([title, original]);
@@ -169,9 +199,9 @@ function findAnime(tmdbId, title, original) {
       if (!fallback) {
         for (var j = 0; j < results.length; j++) {
           var candidate = results[j];
-          if (candidate && candidate.tmdb_id && String(candidate.tmdb_id) !== String(tmdbId))
-            continue;
-          if (isTitleMatch(queries[q], candidate)) {
+          var idMatches = candidate && candidate.tmdb_id && String(candidate.tmdb_id) === String(tmdbId);
+          var idMissing = candidate && !candidate.tmdb_id;
+          if (isExactTitleMatch(queries[q], candidate) || (idMatches || idMissing) && isTitleMatch(queries[q], candidate)) {
             fallback = candidate;
             break;
           }
@@ -216,7 +246,10 @@ function getTauStreams(tauId, animeTitle, episodeLabel, translator) {
     if (!tauId)
       return [];
     try {
-      var data = yield fetchJson(TAU_VIDEO + "/api/video/" + encodeURIComponent(tauId), 15e3);
+      var data = yield fetchJson(TAU_VIDEO + "/api/video/" + encodeURIComponent(tauId), 15e3, {
+        Referer: TAU_VIDEO + "/",
+        Origin: TAU_VIDEO
+      });
       var urls = data && Array.isArray(data.urls) ? data.urls.slice() : [];
       urls.sort(function(a, b) {
         return qualityNumber(b && b.label) - qualityNumber(a && a.label);
@@ -274,16 +307,23 @@ function resolveEpisode(animeId, season, episode, animeTitle) {
 function getStreams(tmdbId, mediaType, season, episode) {
   return __async(this, null, function* () {
     try {
+      console.log("[Animecix v2.1.0] getStreams tmdb=" + String(tmdbId) + " type=" + String(mediaType) + " S" + String(season) + "E" + String(episode));
       var info = yield getTmdbTitle(tmdbId, mediaType);
-      if (!info)
+      if (!info) {
+        console.error("[Animecix] TMDB ba\u015Fl\u0131\u011F\u0131 al\u0131namad\u0131; API ayar\u0131n\u0131 veya uygulama TMDB anahtar\u0131n\u0131 kontrol et");
         return [];
+      }
       var anime = yield findAnime(tmdbId, info.title, info.original);
-      if (!anime || !anime.id)
+      if (!anime || !anime.id) {
+        console.log("[Animecix] Animecix e\u015Fle\u015Fmesi yok: " + info.title);
         return [];
+      }
       var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
       var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
       var title = anime.name || info.title;
-      return yield resolveEpisode(anime.id, s, e, title);
+      var streams = yield resolveEpisode(anime.id, s, e, title);
+      console.log("[Animecix] " + title + " S" + String(s) + "E" + String(e) + " -> " + String(streams.length) + " stream");
+      return streams;
     } catch (_) {
       return [];
     }
