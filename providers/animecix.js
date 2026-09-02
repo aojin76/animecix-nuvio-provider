@@ -1,0 +1,306 @@
+/**
+ * animecix - Built from src/animecix/
+ * Generated: 2026-09-02T08:08:38.321Z
+ */
+var __async = (__this, __arguments, generator) => {
+  return new Promise((resolve, reject) => {
+    var fulfilled = (value) => {
+      try {
+        step(generator.next(value));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    var rejected = (value) => {
+      try {
+        step(generator.throw(value));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    var step = (x) => x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected);
+    step((generator = generator.apply(__this, __arguments)).next());
+  });
+};
+
+// src/animecix/index.js
+var ANIMECIX = "https://animecix.tv";
+var TAU_VIDEO = "https://tau-video.xyz";
+var TMDB = "https://api.themoviedb.org/3";
+function getTmdbKeys() {
+  var keys = [];
+  try {
+    if (typeof globalThis !== "undefined") {
+      var settings = globalThis.SCRAPER_SETTINGS || {};
+      var key = settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey;
+      if (key && String(key).trim())
+        keys.push(String(key).trim());
+    }
+  } catch (_) {
+  }
+  return keys;
+}
+function fetchJson(url, timeoutMs) {
+  var timeout = timeoutMs || 15e3;
+  if (typeof setTimeout !== "function") {
+    return fetch(url).then(function(response) {
+      if (!response || response.ok === false || response.status && response.status >= 400) {
+        throw new Error("HTTP error");
+      }
+      return response.json();
+    });
+  }
+  return new Promise(function(resolve, reject) {
+    var settled = false;
+    var timer = setTimeout(function() {
+      if (settled)
+        return;
+      settled = true;
+      reject(new Error("Request timeout: " + url));
+    }, timeout);
+    fetch(url).then(function(response) {
+      if (!response || response.ok === false || response.status && response.status >= 400) {
+        throw new Error("HTTP error");
+      }
+      return response.json();
+    }).then(function(data) {
+      if (settled)
+        return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(data);
+    }).catch(function(error) {
+      if (settled)
+        return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+function foldTurkish(value) {
+  return String(value || "").replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i").replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u").replace(/[âÂ]/g, "a").replace(/[îÎ]/g, "i").replace(/[ûÛ]/g, "u");
+}
+function normalize(value) {
+  return foldTurkish(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function slug(value) {
+  return foldTurkish(value).trim().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+function uniqueValues(values) {
+  var output = [];
+  for (var i = 0; i < values.length; i++) {
+    var value = values[i];
+    if (!value)
+      continue;
+    if (output.indexOf(value) === -1)
+      output.push(value);
+  }
+  return output;
+}
+function getTmdbTitle(tmdbId, mediaType) {
+  return __async(this, null, function* () {
+    var type = mediaType === "movie" ? "movie" : "tv";
+    var keys = getTmdbKeys();
+    for (var i = 0; i < keys.length; i++) {
+      try {
+        var url = TMDB + "/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?api_key=" + encodeURIComponent(keys[i]);
+        var data = yield fetchJson(url, 12e3);
+        if (!data)
+          continue;
+        var title = data.name || data.title || data.original_name || data.original_title || "";
+        var original = data.original_name || data.original_title || "";
+        if (title || original)
+          return { title: String(title), original: String(original) };
+      } catch (_) {
+      }
+    }
+    return null;
+  });
+}
+function searchAnime(query) {
+  return __async(this, null, function* () {
+    var value = slug(query);
+    if (!value)
+      return [];
+    try {
+      var url = ANIMECIX + "/secure/search/" + encodeURIComponent(value) + "?type=&limit=20";
+      var data = yield fetchJson(url, 12e3);
+      return data && Array.isArray(data.results) ? data.results : [];
+    } catch (_) {
+      return [];
+    }
+  });
+}
+function resultNames(result) {
+  if (!result)
+    return [];
+  return [result.name, result.name_english, result.name_romanji, result.original_title];
+}
+function isTitleMatch(requested, result) {
+  var left = normalize(requested);
+  if (left.length < 3)
+    return false;
+  var names = resultNames(result);
+  for (var i = 0; i < names.length; i++) {
+    var right = normalize(names[i]);
+    if (!right)
+      continue;
+    if (left === right)
+      return true;
+    if (left.length >= 6 && right.length >= 6 && (left.indexOf(right) !== -1 || right.indexOf(left) !== -1)) {
+      return true;
+    }
+  }
+  return false;
+}
+function findAnime(tmdbId, title, original) {
+  return __async(this, null, function* () {
+    var queries = uniqueValues([title, original]);
+    var fallback = null;
+    for (var q = 0; q < queries.length; q++) {
+      var results = yield searchAnime(queries[q]);
+      for (var i = 0; i < results.length; i++) {
+        var result = results[i];
+        if (result && result.tmdb_id && String(result.tmdb_id) === String(tmdbId)) {
+          return result;
+        }
+      }
+      if (!fallback) {
+        for (var j = 0; j < results.length; j++) {
+          var candidate = results[j];
+          if (candidate && candidate.tmdb_id && String(candidate.tmdb_id) !== String(tmdbId))
+            continue;
+          if (isTitleMatch(queries[q], candidate)) {
+            fallback = candidate;
+            break;
+          }
+        }
+      }
+    }
+    return fallback;
+  });
+}
+function getEpisodeVideos(animeId, season, episode) {
+  return __async(this, null, function* () {
+    try {
+      var url = ANIMECIX + "/secure/episode-videos?titleId=" + encodeURIComponent(String(animeId)) + "&episode=" + encodeURIComponent(String(episode)) + "&season=" + encodeURIComponent(String(season));
+      var data = yield fetchJson(url, 15e3);
+      if (Array.isArray(data))
+        return data;
+      if (data && Array.isArray(data.videos))
+        return data.videos;
+      if (data && Array.isArray(data.data))
+        return data.data;
+    } catch (_) {
+    }
+    return [];
+  });
+}
+function getTauId(url) {
+  var match = /tau-video\.xyz\/embed[-/]([A-Za-z0-9]+)/i.exec(String(url || ""));
+  return match ? match[1] : null;
+}
+function qualityNumber(label) {
+  var match = /([0-9]+)/.exec(String(label || ""));
+  return match ? parseInt(match[1], 10) : 0;
+}
+function formatSize(bytes) {
+  var value = Number(bytes);
+  if (!value || !isFinite(value))
+    return "Unknown";
+  return Math.round(value / (1024 * 1024)) + " MB";
+}
+function getTauStreams(tauId, animeTitle, episodeLabel, translator) {
+  return __async(this, null, function* () {
+    if (!tauId)
+      return [];
+    try {
+      var data = yield fetchJson(TAU_VIDEO + "/api/video/" + encodeURIComponent(tauId), 15e3);
+      var urls = data && Array.isArray(data.urls) ? data.urls.slice() : [];
+      urls.sort(function(a, b) {
+        return qualityNumber(b && b.label) - qualityNumber(a && a.label);
+      });
+      var output = [];
+      var suffix = translator ? " \u2022 " + String(translator).slice(0, 50) : "";
+      for (var i = 0; i < urls.length; i++) {
+        var entry = urls[i];
+        if (!entry || !entry.url)
+          continue;
+        var url = String(entry.url);
+        if (!/^https?:\/\//i.test(url))
+          continue;
+        output.push({
+          name: "Animecix (" + (entry.label || "Auto") + ")" + suffix,
+          title: String(animeTitle || "Anime") + " - " + episodeLabel,
+          url,
+          quality: entry.label || "Auto",
+          size: formatSize(entry.size),
+          headers: {},
+          provider: "animecix",
+          type: /\.m3u8(?:\?|$)/i.test(url) ? "m3u8" : "mp4"
+        });
+      }
+      return output;
+    } catch (_) {
+      return [];
+    }
+  });
+}
+function resolveEpisode(animeId, season, episode, animeTitle) {
+  return __async(this, null, function* () {
+    var sources = yield getEpisodeVideos(animeId, season, episode);
+    var streams = [];
+    var seen = [];
+    var label = "B\xF6l\xFCm " + String(episode);
+    var requests = [];
+    for (var i = 0; i < sources.length; i++) {
+      var source = sources[i] || {};
+      var tauId = getTauId(source.url);
+      if (!tauId || seen.indexOf(tauId) !== -1)
+        continue;
+      seen.push(tauId);
+      requests.push(getTauStreams(tauId, animeTitle, label, source.extra));
+    }
+    var parts = yield Promise.all(requests);
+    for (var p = 0; p < parts.length; p++) {
+      var part = parts[p] || [];
+      for (var j = 0; j < part.length; j++)
+        streams.push(part[j]);
+    }
+    return streams;
+  });
+}
+function getStreams(tmdbId, mediaType, season, episode) {
+  return __async(this, null, function* () {
+    try {
+      var info = yield getTmdbTitle(tmdbId, mediaType);
+      if (!info)
+        return [];
+      var anime = yield findAnime(tmdbId, info.title, info.original);
+      if (!anime || !anime.id)
+        return [];
+      var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
+      var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
+      var title = anime.name || info.title;
+      return yield resolveEpisode(anime.id, s, e, title);
+    } catch (_) {
+      return [];
+    }
+  });
+}
+function onSettings() {
+  return __async(this, null, function* () {
+    return [
+      { type: "header", label: "TMDB API Anahtar\u0131" },
+      {
+        type: "text",
+        key: "tmdbApiKey",
+        label: "TMDB API Key (v3)",
+        description: "TMDB ayarlar\u0131ndaki API Anahtar\u0131 alan\u0131n\u0131 gir. Okuma Eri\u015Fim Jetonu de\u011Fildir. Anahtar koda kaydedilmez.",
+        defaultValue: ""
+      }
+    ];
+  });
+}
+module.exports = { getStreams, onSettings };
