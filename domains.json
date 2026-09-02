@@ -36,7 +36,7 @@
       "status": "blocked-cloudflare"
     },
     "hdfilmcehennemi": {
-      "domains": ["https://hdfilmcehennemini.com", "https://www.hdfilmcehennemini.com", "https://www.hdfilmcehennemi.nl"],
+      "domains": ["https://www.hdfilmcehennemi.nl", "https://hdfilmcehennemi.nl", "https://hdfilmcehennemini.com", "https://www.hdfilmcehennemini.com", "https://www.hdfilmcehennemi.ws", "https://hdfilmcehennemi.ws"],
       "allowedHost": "^(?:www\\.)?hdfilmcehennemi(?:ni)?\\.[a-z]{2,}$",
       "signatures": ["hdfilmcehennemi"],
       "searchQueries": ["HDFilmCehennemi güncel adres", "HDFilmCehennemi yeni adres"],
