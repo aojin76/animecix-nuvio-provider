@@ -1,6 +1,6 @@
 /**
  * animelercc - Built from src/animelercc/
- * Generated: 2026-09-02T11:12:08.111Z
+ * Generated: 2026-09-02T11:46:21.232Z
  */
 var __async = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -26,20 +26,25 @@ var __async = (__this, __arguments, generator) => {
 // src/animelercc/index.js
 var BASE_URL = "https://animeler.cc";
 var TMDB = "https://api.themoviedb.org/3";
-var PROVIDER_VERSION = "1.0.1";
-var DEFAULT_TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
+var PROVIDER_VERSION = "1.0.6";
+var DEFAULT_TMDB_API_KEY = "";
+var REQUEST_TIMEOUT_MS = 8e3;
+var RESOLVE_TIMEOUT_MS = 20e3;
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 var PAGE_HEADERS = {
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
   "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
   "User-Agent": USER_AGENT
 };
+var LEGACY_TYBW_TMDB_IDS = ["212624", "214779"];
+var TYBW_SEASON_COUNTS = [13, 13, 14, 6];
 function getTmdbKeys() {
   var keys = [];
   try {
     if (typeof globalThis !== "undefined") {
       var settings = globalThis.SCRAPER_SETTINGS || {};
-      var key = settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey;
+      var key = settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey ||
+        settings.TMDB_API_KEY || settings.tmdbAccessToken || settings.tmdb_access_token || settings.tmdbToken;
       if (key && String(key).trim())
         keys.push(String(key).trim());
     }
@@ -47,7 +52,7 @@ function getTmdbKeys() {
   }
   try {
     if (typeof globalThis !== "undefined") {
-      var injected = globalThis.TMDB_API_KEY || globalThis.__TMDB_API_KEY;
+      var injected = globalThis.TMDB_API_KEY || globalThis.TMDB_ACCESS_TOKEN || globalThis.TMDB_API_ACCESS_TOKEN || globalThis.__TMDB_API_KEY;
       if (injected && String(injected).trim())
         keys.push(String(injected).trim());
     }
@@ -62,8 +67,11 @@ function getTmdbKeys() {
   }
   return unique;
 }
+function isTmdbAccessToken(value) {
+  return /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(value || ""));
+}
 function fetchResponse(url, timeoutMs, headers) {
-  var timeout = timeoutMs || 15e3;
+  var timeout = timeoutMs || REQUEST_TIMEOUT_MS;
   var requestHeaders = {};
   var sourceHeaders = headers || {};
   for (var name in sourceHeaders) {
@@ -99,24 +107,49 @@ function fetchResponse(url, timeoutMs, headers) {
 }
 function fetchText(url, timeoutMs, headers) {
   return __async(this, null, function* () {
-    var response = yield fetchResponse(url, timeoutMs || 15e3, headers || PAGE_HEADERS);
+    var response = yield fetchResponse(url, timeoutMs || REQUEST_TIMEOUT_MS, headers || PAGE_HEADERS);
     if (!response || response.ok === false || response.status && response.status >= 400) {
       throw new Error("HTTP " + (response && response.status ? response.status : "error") + ": " + url);
     }
     return yield response.text();
   });
 }
-function fetchJson(url, timeoutMs) {
+function fetchJson(url, timeoutMs, extraHeaders) {
   return __async(this, null, function* () {
     var headers = {
       Accept: "application/json",
       "User-Agent": USER_AGENT
     };
-    var response = yield fetchResponse(url, timeoutMs || 15e3, headers);
+    if (extraHeaders) {
+      for (var name in extraHeaders) {
+        if (Object.prototype.hasOwnProperty.call(extraHeaders, name)) {
+          headers[name] = extraHeaders[name];
+        }
+      }
+    }
+    var response = yield fetchResponse(url, timeoutMs || REQUEST_TIMEOUT_MS, headers);
     if (!response || response.ok === false || response.status && response.status >= 400) {
       throw new Error("HTTP " + (response && response.status ? response.status : "error") + ": " + url);
     }
     return yield response.json();
+  });
+}
+function withTimeout(promise, timeoutMs, label) {
+  if (typeof setTimeout !== "function")
+    return Promise.resolve(promise);
+  const timeout = Number(timeoutMs) || 15000;
+  let timer = null;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("Timeout after " + timeout + "ms" + (label ? " (" + label + ")" : ""))), timeout);
+  });
+  return Promise.race([promise, guard]).then((value) => {
+    if (timer)
+      clearTimeout(timer);
+    return value;
+  }, (error) => {
+    if (timer)
+      clearTimeout(timer);
+    throw error;
   });
 }
 function decodeHtml(value) {
@@ -137,6 +170,21 @@ function foldTurkish(value) {
 function normalize(value) {
   return foldTurkish(value).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
+function isBleachMain(info) {
+  return normalize(info && info.title) === "bleach" || normalize(info && info.original) === "bleach";
+}
+
+function isBleachTybw(info) {
+  var text = normalize(info && info.title) + normalize(info && info.original);
+  return text.indexOf("bleach") !== -1 && (text.indexOf("thousandyearbloodwar") !== -1 || text.indexOf("sennenkessen") !== -1);
+}
+
+function isBleachTybwRequest(info, season) {
+  if (isBleachTybw(info))
+    return true;
+  var s = parseInt(season, 10) || 1;
+  return isBleachMain(info) && s > 1;
+}
 function uniqueValues(values) {
   var output = [];
   var seen = [];
@@ -156,8 +204,18 @@ function getTmdbInfo(tmdbId, mediaType) {
     var keys = getTmdbKeys();
     for (var i = 0; i < keys.length; i++) {
       try {
-        var url = TMDB + "/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?api_key=" + encodeURIComponent(keys[i]) + "&append_to_response=external_ids";
-        var data = yield fetchJson(url, 2e4);
+        var url = TMDB + "/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?append_to_response=external_ids";
+        var headers = null;
+        if (isTmdbAccessToken(keys[i])) {
+          headers = {
+            Accept: "application/json",
+            Authorization: "Bearer " + String(keys[i]),
+            "User-Agent": USER_AGENT
+          };
+        } else {
+          url += "&api_key=" + encodeURIComponent(keys[i]);
+        }
+        var data = yield fetchJson(url, 2e4, headers);
         if (!data)
           continue;
         var title = data.name || data.title || data.original_name || data.original_title || "";
@@ -171,6 +229,17 @@ function getTmdbInfo(tmdbId, mediaType) {
         }
       } catch (_) {
       }
+    }
+    if (LEGACY_TYBW_TMDB_IDS.indexOf(String(tmdbId)) !== -1) {
+      var legacySeasons = [];
+      for (var s = 0; s < TYBW_SEASON_COUNTS.length; s++) {
+        legacySeasons.push({ season_number: s + 1, episode_count: TYBW_SEASON_COUNTS[s] });
+      }
+      return {
+        title: "Bleach: Thousand-Year Blood War",
+        original: "Bleach: Sennen Kessen-hen",
+        seasons: legacySeasons
+      };
     }
     return null;
   });
@@ -238,22 +307,25 @@ function searchAnime(query) {
       return [];
     try {
       var url = BASE_URL + "/animeler?q=" + encodeURIComponent(value);
-      var html = yield fetchText(url, 15e3, PAGE_HEADERS);
+      var html = yield fetchText(url, REQUEST_TIMEOUT_MS, PAGE_HEADERS);
       return parseSearchResults(html);
     } catch (_) {
       return [];
     }
   });
 }
-function findAnime(title, original) {
+function findAnime(title, original, preferTybw) {
   return __async(this, null, function* () {
-    var queries = uniqueValues([title, original]);
+    var queries = preferTybw ? uniqueValues(["Bleach: Thousand-Year Blood War", title, original]) : uniqueValues([title, original]);
     var best = null;
     var bestScore = 0;
     for (var q = 0; q < queries.length; q++) {
       var results = yield searchAnime(queries[q]);
       for (var i = 0; i < results.length; i++) {
         var result = results[i];
+        if (preferTybw && normalize(result.slug).indexOf("bleachthousandyearbloodwar") !== -1) {
+          return result;
+        }
         var score = titleScore(queries[q], result.name);
         if (score > bestScore) {
           best = result;
@@ -272,7 +344,7 @@ function getEpisodes(anime) {
       return {};
     try {
       var url = BASE_URL + "/anime/" + anime.slug;
-      var html = yield fetchText(url, 15e3, PAGE_HEADERS);
+      var html = yield fetchText(url, REQUEST_TIMEOUT_MS, PAGE_HEADERS);
       var episodes = {};
       var linkPattern = /<a\b[^>]*href\s*=\s*["']([^"']*\/izle\/[^"']+\/([0-9]+)-bolum[^"']*)["'][^>]*>/gi;
       var match;
@@ -330,7 +402,7 @@ function getAbsoluteEpisode(info, season, episode) {
   }
   return offset + e;
 }
-function chooseEpisode(episodes, info, season, episode) {
+function chooseEpisode(episodes, info, season, episode, forceDirect) {
   var s = parseInt(season, 10) || 1;
   var e = parseInt(episode, 10) || 1;
   var available = maxEpisode(episodes);
@@ -339,6 +411,8 @@ function chooseEpisode(episodes, info, season, episode) {
   var absolute = absoluteNumber ? episodes[absoluteNumber] || null : null;
   var counts = getSeasonCounts(info);
   var currentCount = counts && counts[s - 1] ? counts[s - 1] : 0;
+  if (forceDirect && direct)
+    return { number: e, url: direct };
   if (s > 1 && absolute && absoluteNumber !== e && available > currentCount) {
     return { number: absoluteNumber, url: absolute };
   }
@@ -348,25 +422,105 @@ function chooseEpisode(episodes, info, season, episode) {
     return { number: absoluteNumber, url: absolute };
   return null;
 }
-function getPlayerUrl(html) {
-  var match = /\bvar\s+src\s*=\s*["']([^"']+)["']/i.exec(String(html || ""));
-  if (!match)
-    return null;
-  var url = decodeHtml(match[1]);
+function isPlayablePlayerUrl(value) {
+  var url = String(value || "");
   if (!/^https?:\/\//i.test(url))
-    return null;
-  return url;
+    return false;
+  return /\/vstream\/oynatici(?:[/?#]|$)/i.test(url) ||
+    /\.(?:mp4|m3u8)(?:[?#]|$)/i.test(url) ||
+    /(?:\/video\/|\/stream(?:[/?#]|$)|\/embed(?:[/?#]|$))/i.test(url);
+}
+function playerTypeForUrl(value) {
+  const url = String(value || "");
+  if (/\.m3u8(?:[?#]|$)/i.test(url) || /[?&](?:ext|type)=video\.m3u8/i.test(url))
+    return "m3u8";
+  return "mp4";
+}
+function getPlayerUrl(html) {
+  var source = String(html || "");
+  var patterns = [
+    /\b(?:var|let|const)\s+src\s*=\s*["']([^"']+)["']/gi,
+    /(?:^|[;{\s])src\s*=\s*["']([^"']+)["']/gi,
+    /<source\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var match;
+    while ((match = patterns[i].exec(source)) !== null) {
+      var url = decodeHtml(match[1]);
+      if (isPlayablePlayerUrl(url))
+        return url;
+    }
+  }
+  return null;
+}
+function getEmbeddedSources(html) {
+  var match = /\bvar\s+SRC_EMBED\s*=\s*(\[[\s\S]*?\]);/i.exec(String(html || ""));
+  if (!match) {
+    var outputFromResolver = [];
+    var resolverPattern = /api-oynatici-coz[\s\S]{0,180}?encodeURIComponent\(\s*["']((?:\\.|[^"'])+)["']\s*\)[\s\S]{0,80}?ozel\s*=\s*([0-9]+)/gi;
+    var resolverMatch;
+    while (resolverMatch = resolverPattern.exec(String(html || ""))) {
+      var resolverEmbed = String(resolverMatch[1]).replace(/\\\//g, "/").replace(/\\"/g, '"').replace(/\\'/g, "'");
+      if (!/^https?:\/\//i.test(resolverEmbed))
+        continue;
+      outputFromResolver.push({
+        embed: resolverEmbed,
+        special: resolverMatch[2] || "0"
+      });
+    }
+    return outputFromResolver;
+  }
+  try {
+    var data = JSON.parse(match[1]);
+    if (!Array.isArray(data))
+      return [];
+    var output = [];
+    for (var i = 0; i < data.length; i++) {
+      var item = data[i] || {};
+      var embed = decodeHtml(item.e || item.embed || item.url || "");
+      if (!/^https?:\/\//i.test(embed))
+        continue;
+      output.push({
+        embed,
+        special: item.o ? String(item.o) : "0"
+      });
+    }
+    return output;
+  } catch (_) {
+    return [];
+  }
 }
 function resolvePlayer(episodeUrl) {
   return __async(this, null, function* () {
     try {
-      var html = yield fetchText(episodeUrl, 15e3, {
+      var html = yield fetchText(episodeUrl, REQUEST_TIMEOUT_MS, {
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
         Referer: BASE_URL + "/",
         "User-Agent": USER_AGENT
       });
-      return getPlayerUrl(html);
+      var direct = getPlayerUrl(html);
+      if (direct)
+        return direct;
+      var sources = getEmbeddedSources(html);
+      for (var i = 0; i < sources.length; i++) {
+        try {
+          var resolverUrl = BASE_URL + "/api-oynatici-coz?embed=" + encodeURIComponent(sources[i].embed) + "&ozel=" + encodeURIComponent(sources[i].special);
+          var resolved = yield fetchJson(resolverUrl, REQUEST_TIMEOUT_MS, {
+            Referer: episodeUrl,
+            Origin: BASE_URL
+          });
+          var directResolved = resolved && (resolved.url || resolved.src || resolved.stream || resolved.video);
+          if (directResolved && isPlayablePlayerUrl(directResolved))
+            return String(directResolved);
+          var resolvedHtml = resolved && (resolved.html || resolved.data || resolved.content);
+          var player = getPlayerUrl(resolvedHtml || "");
+          if (player)
+            return player;
+        } catch (_) {
+        }
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -383,35 +537,38 @@ function getStreams(tmdbId, mediaType, season, episode) {
       }
       var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
       var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
-      var anime = yield findAnime(info.title, info.original);
+      var useBleachTybwPage = mediaType !== "movie" && isBleachTybwRequest(info, s);
+      var anime = yield findAnime(info.title, info.original, useBleachTybwPage);
       if (!anime) {
         console.log("[Animeler.cc] ba\u015Fl\u0131k e\u015Fle\u015Fmesi yok: " + info.title);
         return [];
       }
       var episodes = yield getEpisodes(anime);
-      var selected = chooseEpisode(episodes, info, s, e);
+      var selected = chooseEpisode(episodes, info, s, e, useBleachTybwPage);
       if (!selected) {
         console.log("[Animeler.cc] b\xF6l\xFCm bulunamad\u0131: " + info.title + " S" + String(s) + "E" + String(e));
         return [];
       }
-      var playerUrl = yield resolvePlayer(selected.url);
+      var playerUrl = yield withTimeout(resolvePlayer(selected.url), RESOLVE_TIMEOUT_MS, "Animeler.cc player resolution");
       if (!playerUrl) {
         console.log("[Animeler.cc] oynat\u0131c\u0131 URLsi bulunamad\u0131: " + selected.url);
         return [];
       }
+      var playerType = playerTypeForUrl(playerUrl);
       return [{
-        name: "Animeler.cc (MP4)",
+        name: "Animeler.cc (" + playerType.toUpperCase() + ")",
         title: String(info.title) + " - S" + String(s) + "B" + String(e),
         url: playerUrl,
         quality: "Auto",
         size: "Unknown",
         headers: {
           "User-Agent": USER_AGENT,
+          Accept: "video/mp4,video/*;q=0.9,application/vnd.apple.mpegurl,*/*;q=0.7",
           Referer: selected.url,
           Origin: BASE_URL
         },
         provider: "animelercc",
-        type: "mp4"
+        type: playerType
       }];
     } catch (_) {
       return [];
@@ -421,12 +578,12 @@ function getStreams(tmdbId, mediaType, season, episode) {
 function onSettings() {
   return __async(this, null, function* () {
     return [
-      { type: "header", label: "TMDB API Anahtar\u0131 (opsiyonel)" },
+      { type: "header", label: "TMDB API Anahtar\u0131 (gerekli)" },
       {
         type: "text",
         key: "tmdbApiKey",
-        label: "TMDB API Key (v3)",
-        description: "Bo\u015F b\u0131rak\u0131rsan varsay\u0131lan anahtar kullan\u0131l\u0131r. Kendi TMDB v3 anahtar\u0131n\u0131 girersen bu sa\u011Flay\u0131c\u0131 onu kullan\u0131r. Okuma Eri\u015Fim Jetonu de\u011Fildir.",
+        label: "TMDB API Key veya Read Access Token",
+        description: "Kendi TMDB v3 API Key'ini veya v4 Read Access Token'\u0131n\u0131 gir. Anahtar koda kaydedilmez.",
         defaultValue: ""
       }
     ];
