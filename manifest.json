@@ -1,6 +1,6 @@
 {
   "name": "Animecix Nuvio",
-  "version": "2.5.1",
+  "version": "2.5.3",
   "scrapers": [
     {
       "id": "animecix",
@@ -31,12 +31,12 @@
       "id": "animelercc",
       "name": "Animeler.cc",
       "description": "Animeler.cc için Türkçe anime video sağlayıcısı",
-      "version": "1.0.1",
+      "version": "1.0.3",
       "author": "aojin76",
       "supportedTypes": [
         "tv"
       ],
-      "filename": "providers/animelercc-1.0.1.js",
+      "filename": "providers/animelercc-1.0.3.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://animeler.cc/favicon.ico",
