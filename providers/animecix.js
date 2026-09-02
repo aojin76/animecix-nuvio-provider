@@ -1,6 +1,6 @@
 /**
  * animecix - Built from src/animecix/
- * Generated: 2026-09-02T08:27:58.245Z
+ * Generated: 2026-09-02T09:35:39.075Z
  */
 var __async = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -27,6 +27,7 @@ var __async = (__this, __arguments, generator) => {
 var ANIMECIX = "https://animecix.tv";
 var TAU_VIDEO = "https://tau-video.xyz";
 var TMDB = "https://api.themoviedb.org/3";
+var PROVIDER_VERSION = "2.1.1";
 function getTmdbKeys() {
   var keys = [];
   try {
@@ -98,22 +99,26 @@ function fetchJson(url, timeoutMs, extraHeaders) {
   });
 }
 function foldTurkish(value) {
-  return String(value || "").replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i").replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u").replace(/[âÂ]/g, "a").replace(/[îÎ]/g, "i").replace(/[ûÛ]/g, "u");
+  return String(value || "").replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i").replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u").replace(/[âÂ]/g, "a").replace(/[îÎ]/g, "i").replace(/[ûÛ]/g, "u").replace(/[āĀ]/g, "a").replace(/[ēĒ]/g, "e").replace(/[īĪ]/g, "i").replace(/[ōŌ]/g, "o").replace(/[ūŪ]/g, "u");
 }
 function normalize(value) {
   return foldTurkish(value).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 function slug(value) {
-  return foldTurkish(value).trim().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return foldTurkish(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 function uniqueValues(values) {
   var output = [];
+  var seen = [];
   for (var i = 0; i < values.length; i++) {
     var value = values[i];
     if (!value)
       continue;
-    if (output.indexOf(value) === -1)
-      output.push(value);
+    var key = foldTurkish(value).trim().toLowerCase();
+    if (!key || seen.indexOf(key) !== -1)
+      continue;
+    seen.push(key);
+    output.push(String(value).trim());
   }
   return output;
 }
@@ -124,7 +129,7 @@ function getTmdbTitle(tmdbId, mediaType) {
     for (var i = 0; i < keys.length; i++) {
       try {
         var url = TMDB + "/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?api_key=" + encodeURIComponent(keys[i]);
-        var data = yield fetchJson(url, 12e3);
+        var data = yield fetchJson(url, 2e4);
         if (!data)
           continue;
         var title = data.name || data.title || data.original_name || data.original_title || "";
@@ -144,7 +149,7 @@ function searchAnime(query) {
       return [];
     try {
       var url = ANIMECIX + "/secure/search/" + encodeURIComponent(value) + "?type=&limit=20";
-      var data = yield fetchJson(url, 12e3);
+      var data = yield fetchJson(url, 2e4);
       return data && Array.isArray(data.results) ? data.results : [];
     } catch (_) {
       return [];
@@ -215,7 +220,7 @@ function getEpisodeVideos(animeId, season, episode) {
   return __async(this, null, function* () {
     try {
       var url = ANIMECIX + "/secure/episode-videos?titleId=" + encodeURIComponent(String(animeId)) + "&episode=" + encodeURIComponent(String(episode)) + "&season=" + encodeURIComponent(String(season));
-      var data = yield fetchJson(url, 15e3);
+      var data = yield fetchJson(url, 2e4);
       if (Array.isArray(data))
         return data;
       if (data && Array.isArray(data.videos))
@@ -246,7 +251,7 @@ function getTauStreams(tauId, animeTitle, episodeLabel, translator) {
     if (!tauId)
       return [];
     try {
-      var data = yield fetchJson(TAU_VIDEO + "/api/video/" + encodeURIComponent(tauId), 15e3, {
+      var data = yield fetchJson(TAU_VIDEO + "/api/video/" + encodeURIComponent(tauId), 2e4, {
         Referer: TAU_VIDEO + "/",
         Origin: TAU_VIDEO
       });
@@ -307,7 +312,7 @@ function resolveEpisode(animeId, season, episode, animeTitle) {
 function getStreams(tmdbId, mediaType, season, episode) {
   return __async(this, null, function* () {
     try {
-      console.log("[Animecix v2.1.0] getStreams tmdb=" + String(tmdbId) + " type=" + String(mediaType) + " S" + String(season) + "E" + String(episode));
+      console.log("[Animecix v" + PROVIDER_VERSION + "] getStreams tmdb=" + String(tmdbId) + " type=" + String(mediaType) + " S" + String(season) + "E" + String(episode));
       var info = yield getTmdbTitle(tmdbId, mediaType);
       if (!info) {
         console.error("[Animecix] TMDB ba\u015Fl\u0131\u011F\u0131 al\u0131namad\u0131; API ayar\u0131n\u0131 veya uygulama TMDB anahtar\u0131n\u0131 kontrol et");
