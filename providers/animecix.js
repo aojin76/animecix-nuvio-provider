@@ -1,6 +1,6 @@
 /**
  * animecix - Built from src/animecix/
- * Generated: 2026-09-02T10:10:45.875Z
+ * Generated: 2026-09-02T10:26:13.918Z
  */
 var __async = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -28,8 +28,10 @@ var ANIMECIX = "https://animecix.tv";
 var TAU_VIDEO = "https://tau-video.xyz";
 var TMDB = "https://api.themoviedb.org/3";
 var EPISODE_MAPPING = "https://id-mapping-api-malid.hf.space/api/resolve";
-var PROVIDER_VERSION = "2.2.0";
+var PROVIDER_VERSION = "2.3.0";
 var BLEACH_SEASON_COUNTS = [20, 21, 22, 28, 18, 22, 20, 16, 22, 16, 7, 17, 36, 51, 26, 24];
+var BLEACH_TYBW_TMDB_IDS = ["214779", "212624"];
+var BLEACH_TYBW_SEASON_COUNTS = [13, 13, 14, 6];
 function getTmdbKeys() {
   var keys = [];
   try {
@@ -138,7 +140,12 @@ function getTmdbTitle(tmdbId, mediaType) {
         var original = data.original_name || data.original_title || "";
         var imdbId = data.external_ids && data.external_ids.imdb_id ? String(data.external_ids.imdb_id) : "";
         if (title || original) {
-          return { title: String(title), original: String(original), imdbId };
+          return {
+            title: String(title),
+            original: String(original),
+            imdbId,
+            seasons: Array.isArray(data.seasons) ? data.seasons : []
+          };
         }
       } catch (_) {
       }
@@ -214,6 +221,42 @@ function isBleach(tmdbId, info) {
     return true;
   return normalize(info && info.title) === "bleach" || normalize(info && info.original) === "bleach";
 }
+function isBleachTybw(tmdbId, info) {
+  var id = String(tmdbId || "");
+  if (BLEACH_TYBW_TMDB_IDS.indexOf(id) !== -1)
+    return true;
+  var text = normalize(info && info.title) + normalize(info && info.original);
+  return text.indexOf("thousandyearbloodwar") !== -1 || text.indexOf("sennenkessenhen") !== -1 || text.indexOf("sennenkessen") !== -1;
+}
+function getSeasonCounts(info) {
+  var seasons = info && Array.isArray(info.seasons) ? info.seasons : [];
+  if (!seasons.length)
+    return null;
+  var counts = [];
+  for (var i = 0; i < seasons.length; i++) {
+    var item = seasons[i] || {};
+    var number = parseInt(item.season_number, 10);
+    var count = parseInt(item.episode_count, 10);
+    if (number < 1 || !count || count < 1)
+      continue;
+    counts[number - 1] = count;
+  }
+  return counts.length ? counts : null;
+}
+function getBleachTybwAbsoluteEpisode(info, season, episode) {
+  var s = parseInt(season, 10) || 1;
+  var e = parseInt(episode, 10) || 1;
+  var counts = getSeasonCounts(info) || BLEACH_TYBW_SEASON_COUNTS;
+  var currentCount = counts[s - 1];
+  if (!currentCount && s === 1 && e >= 1 && e <= 46)
+    return e;
+  if (!currentCount || e < 1 || e > currentCount)
+    return null;
+  var offset = 0;
+  for (var i = 0; i < s - 1; i++)
+    offset += counts[i] || 0;
+  return offset + e;
+}
 function getBleachAbsoluteEpisode(season, episode) {
   var s = parseInt(season, 10) || 1;
   var e = parseInt(episode, 10) || 1;
@@ -228,6 +271,12 @@ function getBleachAbsoluteEpisode(season, episode) {
 function getSourceEpisode(tmdbId, info, season, episode, mapped) {
   var s = parseInt(season, 10) || 1;
   var e = parseInt(episode, 10) || 1;
+  if (isBleachTybw(tmdbId, info)) {
+    var tybwAbsolute = getBleachTybwAbsoluteEpisode(info, s, e);
+    if (tybwAbsolute)
+      return { season: 2, episode: tybwAbsolute };
+    return { season: 2, episode: e };
+  }
   if (isBleach(tmdbId, info)) {
     if (s >= 1 && s <= BLEACH_SEASON_COUNTS.length) {
       var absolute = mapped && mapped.episode ? mapped.episode : getBleachAbsoluteEpisode(s, e);
@@ -241,7 +290,7 @@ function getSourceEpisode(tmdbId, info, season, episode, mapped) {
   }
   return { season: s, episode: e };
 }
-function findAnime(tmdbId, title, original) {
+function findAnime(tmdbId, title, original, allowBleachAlias) {
   return __async(this, null, function* () {
     var queries = uniqueValues([title, original]);
     var fallback = null;
@@ -262,6 +311,15 @@ function findAnime(tmdbId, title, original) {
             fallback = candidate;
             break;
           }
+        }
+      }
+    }
+    if (allowBleachAlias) {
+      var bleachResults = yield searchAnime("bleach");
+      for (var k = 0; k < bleachResults.length; k++) {
+        var bleach = bleachResults[k];
+        if (bleach && (String(bleach.id) === "82" || String(bleach.tmdb_id) === "30984" || normalize(bleach.name) === "bleach")) {
+          return bleach;
         }
       }
     }
@@ -373,7 +431,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
       var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
       var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
       var lookup = yield Promise.all([
-        findAnime(tmdbId, info.title, info.original),
+        findAnime(tmdbId, info.title, info.original, isBleachTybw(tmdbId, info)),
         mediaType === "movie" ? Promise.resolve(null) : getEpisodeMapping(info.imdbId, s, e)
       ]);
       var anime = lookup[0];
