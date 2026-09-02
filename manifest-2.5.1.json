@@ -1,0 +1,54 @@
+{
+  "name": "Animecix Nuvio",
+  "version": "2.5.1",
+  "scrapers": [
+    {
+      "id": "animecix",
+      "name": "Animecix",
+      "description": "Animecix.tv için güncel Türkçe anime video sağlayıcısı",
+      "version": "2.4.0",
+      "author": "aojin76",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/animecix-2.4.0.js",
+      "enabled": true,
+      "hasSettings": true,
+      "logo": "https://animecix.tv/favicon.ico",
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4",
+        "m3u8"
+      ],
+      "limited": false,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "animelercc",
+      "name": "Animeler.cc",
+      "description": "Animeler.cc için Türkçe anime video sağlayıcısı",
+      "version": "1.0.1",
+      "author": "aojin76",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/animelercc-1.0.1.js",
+      "enabled": true,
+      "hasSettings": true,
+      "logo": "https://animeler.cc/favicon.ico",
+      "contentLanguage": [
+        "tr"
+      ],
+      "formats": [
+        "mp4"
+      ],
+      "limited": false,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    }
+  ]
+}
