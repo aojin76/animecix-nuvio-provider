@@ -1,6 +1,6 @@
 /**
  * animecix - Built from src/animecix/
- * Generated: 2026-09-02T10:28:37.238Z
+ * Generated: 2026-09-02T10:37:05.824Z
  */
 var __async = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -28,7 +28,12 @@ var ANIMECIX = "https://animecix.tv";
 var TAU_VIDEO = "https://tau-video.xyz";
 var TMDB = "https://api.themoviedb.org/3";
 var EPISODE_MAPPING = "https://id-mapping-api-malid.hf.space/api/resolve";
-var PROVIDER_VERSION = "2.3.0";
+var PROVIDER_VERSION = "2.3.1";
+var TAU_STREAM_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Referer: TAU_VIDEO + "/",
+  Origin: TAU_VIDEO
+};
 var BLEACH_SEASON_COUNTS = [20, 21, 22, 28, 18, 22, 20, 16, 22, 16, 7, 17, 36, 51, 26, 24];
 var BLEACH_TYBW_TMDB_IDS = ["214779", "212624"];
 var BLEACH_TYBW_SEASON_COUNTS = [13, 13, 14, 6];
@@ -384,7 +389,7 @@ function getTauStreams(tauId, animeTitle, episodeLabel, translator) {
           url,
           quality: entry.label || "Auto",
           size: formatSize(entry.size),
-          headers: {},
+          headers: TAU_STREAM_HEADERS,
           provider: "animecix",
           type: /\.m3u8(?:\?|$)/i.test(url) ? "m3u8" : "mp4"
         });
