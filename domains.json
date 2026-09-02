@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-02T00:00:00.000Z",
+  "description": "Nuvio sağlayıcı alan adları. GitHub Actions doğrulanmış yeni alan adlarını günlük olarak arar.",
+  "providers": {
+    "animecix": {
+      "domains": ["https://animecix.tv"],
+      "allowedHost": "^(?:www\\.)?animecix\\.[a-z]{2,}$",
+      "signatures": ["animecix"],
+      "autoDiscover": true,
+      "required": true,
+      "status": "active"
+    },
+    "animelercc": {
+      "domains": ["https://animeler.cc"],
+      "allowedHost": "^(?:www\\.)?animeler\\.cc$",
+      "signatures": ["animeler"],
+      "autoDiscover": false,
+      "required": true,
+      "status": "active"
+    },
+    "dizipal": {
+      "domains": ["https://dizipal1578.com"],
+      "allowedHost": "^(?:www\\.)?dizipal[0-9]+\\.[a-z]{2,}$",
+      "signatures": ["dizipal", "/bg/searchcontent"],
+      "searchQueries": ["Dizipal güncel adres", "Dizipal yeni adres"],
+      "autoDiscover": true,
+      "required": true,
+      "status": "active"
+    },
+    "hdfilmcehennemi": {
+      "domains": ["https://www.hdfilmcehennemi.nl"],
+      "allowedHost": "^(?:www\\.)?hdfilmcehennemi\\.[a-z]{2,}$",
+      "signatures": ["hdfilmcehennemi"],
+      "searchQueries": ["HDFilmCehennemi güncel adres", "HDFilmCehennemi yeni adres"],
+      "autoDiscover": true,
+      "required": false,
+      "status": "blocked-cloudflare"
+    },
+    "fullhdfilmizlesenow": {
+      "domains": ["https://www.fullhdfilmizlesene.now"],
+      "allowedHost": "^(?:www\\.)?fullhdfilmizlesene\\.[a-z]{2,}$",
+      "signatures": ["fullhdfilmizlesene"],
+      "searchQueries": ["FullHDFilmizlesene güncel adres", "FullHDFilmizlesene yeni adres"],
+      "autoDiscover": true,
+      "required": false,
+      "status": "blocked-cloudflare"
+    }
+  }
+}
