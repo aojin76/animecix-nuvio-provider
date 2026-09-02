@@ -26,8 +26,8 @@ var __async = (__this, __arguments, generator) => {
 // src/animelercc/index.js
 var BASE_URL = "https://animeler.cc";
 var TMDB = "https://api.themoviedb.org/3";
-var PROVIDER_VERSION = "1.0.4";
-var DEFAULT_TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
+var PROVIDER_VERSION = "1.0.5";
+var DEFAULT_TMDB_API_KEY = "";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 var PAGE_HEADERS = {
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -41,7 +41,8 @@ function getTmdbKeys() {
   try {
     if (typeof globalThis !== "undefined") {
       var settings = globalThis.SCRAPER_SETTINGS || {};
-      var key = settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey;
+      var key = settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey ||
+        settings.TMDB_API_KEY || settings.tmdbAccessToken || settings.tmdb_access_token || settings.tmdbToken;
       if (key && String(key).trim())
         keys.push(String(key).trim());
     }
@@ -49,7 +50,7 @@ function getTmdbKeys() {
   }
   try {
     if (typeof globalThis !== "undefined") {
-      var injected = globalThis.TMDB_API_KEY || globalThis.__TMDB_API_KEY;
+      var injected = globalThis.TMDB_API_KEY || globalThis.TMDB_ACCESS_TOKEN || globalThis.TMDB_API_ACCESS_TOKEN || globalThis.__TMDB_API_KEY;
       if (injected && String(injected).trim())
         keys.push(String(injected).trim());
     }
@@ -63,6 +64,9 @@ function getTmdbKeys() {
       unique.push(keys[i]);
   }
   return unique;
+}
+function isTmdbAccessToken(value) {
+  return /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(value || ""));
 }
 function fetchResponse(url, timeoutMs, headers) {
   var timeout = timeoutMs || 15e3;
@@ -149,6 +153,18 @@ function normalize(value) {
 function isBleachMain(info) {
   return normalize(info && info.title) === "bleach" || normalize(info && info.original) === "bleach";
 }
+
+function isBleachTybw(info) {
+  var text = normalize(info && info.title) + normalize(info && info.original);
+  return text.indexOf("bleach") !== -1 && (text.indexOf("thousandyearbloodwar") !== -1 || text.indexOf("sennenkessen") !== -1);
+}
+
+function isBleachTybwRequest(info, season) {
+  if (isBleachTybw(info))
+    return true;
+  var s = parseInt(season, 10) || 1;
+  return isBleachMain(info) && s > 1;
+}
 function uniqueValues(values) {
   var output = [];
   var seen = [];
@@ -168,8 +184,18 @@ function getTmdbInfo(tmdbId, mediaType) {
     var keys = getTmdbKeys();
     for (var i = 0; i < keys.length; i++) {
       try {
-        var url = TMDB + "/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?api_key=" + encodeURIComponent(keys[i]) + "&append_to_response=external_ids";
-        var data = yield fetchJson(url, 2e4);
+        var url = TMDB + "/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?append_to_response=external_ids";
+        var headers = null;
+        if (isTmdbAccessToken(keys[i])) {
+          headers = {
+            Accept: "application/json",
+            Authorization: "Bearer " + String(keys[i]),
+            "User-Agent": USER_AGENT
+          };
+        } else {
+          url += "&api_key=" + encodeURIComponent(keys[i]);
+        }
+        var data = yield fetchJson(url, 2e4, headers);
         if (!data)
           continue;
         var title = data.name || data.title || data.original_name || data.original_title || "";
@@ -376,14 +402,30 @@ function chooseEpisode(episodes, info, season, episode, forceDirect) {
     return { number: absoluteNumber, url: absolute };
   return null;
 }
-function getPlayerUrl(html) {
-  var match = /\bvar\s+src\s*=\s*["']([^"']+)["']/i.exec(String(html || ""));
-  if (!match)
-    return null;
-  var url = decodeHtml(match[1]);
+function isPlayablePlayerUrl(value) {
+  var url = String(value || "");
   if (!/^https?:\/\//i.test(url))
-    return null;
-  return url;
+    return false;
+  return /\/vstream\/oynatici(?:[/?#]|$)/i.test(url) ||
+    /\.(?:mp4|m3u8)(?:[?#]|$)/i.test(url) ||
+    /(?:\/video\/|\/stream(?:[/?#]|$)|\/embed(?:[/?#]|$))/i.test(url);
+}
+function getPlayerUrl(html) {
+  var source = String(html || "");
+  var patterns = [
+    /\b(?:var|let|const)\s+src\s*=\s*["']([^"']+)["']/gi,
+    /(?:^|[;{\s])src\s*=\s*["']([^"']+)["']/gi,
+    /<source\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var match;
+    while ((match = patterns[i].exec(source)) !== null) {
+      var url = decodeHtml(match[1]);
+      if (isPlayablePlayerUrl(url))
+        return url;
+    }
+  }
+  return null;
 }
 function getEmbeddedSources(html) {
   var match = /\bvar\s+SRC_EMBED\s*=\s*(\[[\s\S]*?\]);/i.exec(String(html || ""));
@@ -442,6 +484,9 @@ function resolvePlayer(episodeUrl) {
             Referer: episodeUrl,
             Origin: BASE_URL
           });
+          var directResolved = resolved && (resolved.url || resolved.src || resolved.stream || resolved.video);
+          if (directResolved && isPlayablePlayerUrl(directResolved))
+            return String(directResolved);
           var resolvedHtml = resolved && (resolved.html || resolved.data || resolved.content);
           var player = getPlayerUrl(resolvedHtml || "");
           if (player)
@@ -466,7 +511,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
       }
       var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
       var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
-      var useBleachTybwPage = mediaType !== "movie" && isBleachMain(info) && s === 2;
+      var useBleachTybwPage = mediaType !== "movie" && isBleachTybwRequest(info, s);
       var anime = yield findAnime(info.title, info.original, useBleachTybwPage);
       if (!anime) {
         console.log("[Animeler.cc] ba\u015Fl\u0131k e\u015Fle\u015Fmesi yok: " + info.title);
@@ -505,12 +550,12 @@ function getStreams(tmdbId, mediaType, season, episode) {
 function onSettings() {
   return __async(this, null, function* () {
     return [
-      { type: "header", label: "TMDB API Anahtar\u0131 (opsiyonel)" },
+      { type: "header", label: "TMDB API Anahtar\u0131 (gerekli)" },
       {
         type: "text",
         key: "tmdbApiKey",
-        label: "TMDB API Key (v3)",
-        description: "Bo\u015F b\u0131rak\u0131rsan varsay\u0131lan anahtar kullan\u0131l\u0131r. Kendi TMDB v3 anahtar\u0131n\u0131 girersen bu sa\u011Flay\u0131c\u0131 onu kullan\u0131r. Okuma Eri\u015Fim Jetonu de\u011Fildir.",
+        label: "TMDB API Key veya Read Access Token",
+        description: "Kendi TMDB v3 API Key'ini veya v4 Read Access Token'\u0131n\u0131 gir. Anahtar koda kaydedilmez.",
         defaultValue: ""
       }
     ];

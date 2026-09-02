@@ -9,7 +9,7 @@
 var BASE_URL = "https://animexe.com";
 var TMDB_URL = "https://api.themoviedb.org/3";
 var REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
-var PROVIDER_VERSION = "1.0.2";
+var PROVIDER_VERSION = "1.0.3";
 var DEFAULT_TMDB_API_KEY = "";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 var PAGE_HEADERS = {
@@ -305,9 +305,10 @@ function candidateNames(row) {
   return [row && row.title, row && row.title_en, row && row.name, row && row.original_title].filter(Boolean);
 }
 
-function findCandidates(info, mediaType, domain) {
+function findCandidates(info, mediaType, season, domain) {
   var targets = [];
-  var rawTargets = [info.turkishTitle, info.title, info.originalTitle];
+  var preferTybw = isBleachTybwRequest(info, mediaType, season);
+  var rawTargets = preferTybw ? ["Bleach: Thousand-Year Blood War", info.turkishTitle, info.title, info.originalTitle] : [info.turkishTitle, info.title, info.originalTitle];
   for (var i = 0; i < rawTargets.length; i++) {
     var value = String(rawTargets[i] || "").trim();
     if (value && targets.indexOf(value) === -1)
@@ -337,6 +338,8 @@ function findCandidates(info, mediaType, domain) {
             score -= 8;
           if (info.year && String(row.year || "").slice(0, 4) === String(info.year).slice(0, 4))
             score += 4;
+          if (preferTybw && normalizeTitle(rowSlug).indexOf("bleachthousandyearbloodwar") !== -1)
+            score += 1000;
           if (score > 0)
             rows.push({ row: row, score: score });
         }
@@ -357,6 +360,17 @@ function findCandidates(info, mediaType, domain) {
         }
       }
     }
+    if (preferTybw) {
+      var hasTybw = false;
+      for (var c = 0; c < output.length; c++) {
+        if (normalizeTitle(output[c] && output[c].slug).indexOf("bleachthousandyearbloodwar") !== -1) {
+          hasTybw = true;
+          break;
+        }
+      }
+      if (!hasTybw)
+        output.unshift({ slug: "bleach-thousand-year-blood-war-7443", title: "Bleach: Thousand-Year Blood War" });
+    }
     return output.slice(0, 6);
   });
 }
@@ -368,6 +382,20 @@ function isBleachMain(info) {
     return true;
   var text = normalizeTitle((info && info.title) || "") + normalizeTitle((info && info.originalTitle) || "");
   return text.indexOf("bleach") !== -1 && text.indexOf("thousandyearbloodwar") === -1 && text.indexOf("sennenkessen") === -1;
+}
+
+function isBleachTybw(info) {
+  var text = normalizeTitle((info && info.title) || "") + normalizeTitle((info && info.originalTitle) || "") + normalizeTitle((info && info.turkishTitle) || "");
+  return text.indexOf("bleach") !== -1 && (text.indexOf("thousandyearbloodwar") !== -1 || text.indexOf("sennenkessen") !== -1);
+}
+
+function isBleachTybwRequest(info, mediaType, season) {
+  if (mediaType === "movie")
+    return false;
+  if (isBleachTybw(info))
+    return true;
+  var s = parseInt(season, 10) || 1;
+  return isBleachMain(info) && s > 1;
 }
 
 function bleachAbsoluteEpisode(season, episode) {
@@ -389,13 +417,23 @@ function episodeUrlVariants(candidate, info, mediaType, season, episode, domain)
   var e = parseInt(episode, 10) || 1;
   var site = String(domain || BASE_URL).replace(/\/+$/, "");
   var urls = [];
+  var tybwRequest = isBleachTybwRequest(info, mediaType, s);
+  var normalizedSlug = normalizeTitle(value);
+  if (tybwRequest && isBleachMain(info) && normalizedSlug.indexOf("bleachthousandyearbloodwar") === -1)
+    return [];
   function add(seasonNumber, episodeNumber) {
     var url = site + "/watch/" + value + "/" + String(seasonNumber) + "/" + String(episodeNumber);
     if (urls.indexOf(url) === -1)
       urls.push(url);
   }
-  add(mediaType === "movie" ? 1 : s, mediaType === "movie" ? 1 : e);
-  if (mediaType !== "movie" && isBleachMain(info) && s !== 1) {
+  if (mediaType === "movie")
+    add(1, 1);
+  else if (tybwRequest)
+    // Animexe keeps TYBW in a separate title with a single episode sequence.
+    add(1, e);
+  else
+    add(s, e);
+  if (mediaType !== "movie" && !tybwRequest && isBleachMain(info) && s !== 1) {
     var absolute = bleachAbsoluteEpisode(s, e);
     if (absolute)
       add(1, absolute);
@@ -601,7 +639,7 @@ function resolveTarget(tmdbId, mediaType, season, episode) {
     if (!info.title && !info.originalTitle && !info.turkishTitle)
       return null;
     return getDomainCandidates().then(function(domains) {
-      return findCandidates(info, mediaType, domains[0] || BASE_URL).then(function(candidates) {
+      return findCandidates(info, mediaType, season, domains[0] || BASE_URL).then(function(candidates) {
         var domainIndex = 0;
         function tryDomain() {
           if (domainIndex >= domains.length)
