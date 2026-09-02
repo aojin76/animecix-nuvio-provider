@@ -1,6 +1,6 @@
 {
   "name": "Animecix Nuvio",
-  "version": "2.7.0",
+  "version": "2.7.2",
   "scrapers": [
     {
       "id": "animecix",
@@ -23,10 +23,10 @@
       "id": "animexe",
       "name": "Animexe",
       "description": "Animexe.com için Türkçe anime video sağlayıcısı",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "aojin76",
       "supportedTypes": ["tv"],
-      "filename": "providers/animexe-1.0.0.js",
+      "filename": "providers/animexe-1.0.2.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://animexe.com/favicon.png",
@@ -57,10 +57,10 @@
       "id": "dizibox",
       "name": "DiziBox",
       "description": "DiziBox yabancı dizi kaynağı; erişim Cloudflare veya IP kısıtına bağlı olabilir",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "aojin76",
       "supportedTypes": ["tv"],
-      "filename": "providers/dizibox-1.0.0.js",
+      "filename": "providers/dizibox-1.0.2.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://www.dizibox.live/favicon.ico",

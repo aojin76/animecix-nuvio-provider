@@ -28,7 +28,7 @@
       "status": "active"
     },
     "dizibox": {
-      "domains": ["https://www.dizibox.live"],
+      "domains": ["https://www.dizibox.live", "https://dizibox.live"],
       "allowedHost": "^(?:www\\.)?dizibox\\.live$",
       "signatures": ["dizibox"],
       "autoDiscover": false,
