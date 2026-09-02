@@ -1,6 +1,6 @@
 /**
  * animecix - Built from src/animecix/
- * Generated: 2026-09-02T10:26:13.918Z
+ * Generated: 2026-09-02T10:28:37.238Z
  */
 var __async = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -430,9 +430,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
       }
       var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
       var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
+      var bleachTybw = isBleachTybw(tmdbId, info);
       var lookup = yield Promise.all([
-        findAnime(tmdbId, info.title, info.original, isBleachTybw(tmdbId, info)),
-        mediaType === "movie" ? Promise.resolve(null) : getEpisodeMapping(info.imdbId, s, e)
+        findAnime(tmdbId, info.title, info.original, bleachTybw),
+        mediaType === "movie" || bleachTybw ? Promise.resolve(null) : getEpisodeMapping(info.imdbId, s, e)
       ]);
       var anime = lookup[0];
       var mapped = lookup[1];
