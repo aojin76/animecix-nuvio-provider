@@ -13,7 +13,7 @@
 var DEFAULT_DOMAIN = "https://www.dizibox.live";
 var REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
 var TMDB_URL = "https://api.themoviedb.org/3";
-var PROVIDER_VERSION = "1.0.0";
+var PROVIDER_VERSION = "1.0.2";
 var DEFAULT_TMDB_API_KEY = "";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 var PAGE_HEADERS = {
@@ -31,6 +31,8 @@ var registryCache = null;
 var registryExpiresAt = 0;
 
 function withTimeout(promise, timeoutMs, label) {
+  if (typeof setTimeout !== "function")
+    return Promise.resolve(promise);
   var timeout = Number(timeoutMs) || 15000;
   var timer = null;
   var guard = new Promise(function(_, reject) {
@@ -82,18 +84,40 @@ function fetchJson(url, options, timeoutMs) {
 function getTmdbApiKey() {
   try {
     var settings = typeof globalThis !== "undefined" ? globalThis.SCRAPER_SETTINGS : null;
-    var userKey = settings && (settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey);
+    var userKey = settings && (settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey ||
+      settings.TMDB_API_KEY || settings.tmdbAccessToken || settings.tmdb_access_token || settings.tmdbToken);
     if (userKey && String(userKey).trim())
       return String(userKey).trim();
   } catch (_) {
   }
   try {
-    var injected = typeof globalThis !== "undefined" ? (globalThis.TMDB_API_KEY || globalThis.__TMDB_API_KEY) : "";
+    var injected = typeof globalThis !== "undefined" ? (globalThis.TMDB_API_KEY || globalThis.TMDB_ACCESS_TOKEN ||
+      globalThis.TMDB_API_ACCESS_TOKEN || globalThis.__TMDB_API_KEY) : "";
     if (injected && String(injected).trim())
       return String(injected).trim();
   } catch (_) {
   }
   return DEFAULT_TMDB_API_KEY;
+}
+
+function isTmdbAccessToken(value) {
+  return /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(value || ""));
+}
+
+function tmdbRequest(type, tmdbId, key) {
+  var url = TMDB_URL + "/" + type + "/" + encodeURIComponent(String(tmdbId)) +
+    "?append_to_response=external_ids,translations";
+  var headers = API_HEADERS;
+  if (isTmdbAccessToken(key)) {
+    headers = {
+      Accept: API_HEADERS.Accept,
+      Authorization: "Bearer " + String(key),
+      "User-Agent": USER_AGENT
+    };
+  } else {
+    url += "&api_key=" + encodeURIComponent(String(key));
+  }
+  return { url: url, headers: headers };
 }
 
 function getTmdbInfo(tmdbId, mediaType) {
@@ -111,11 +135,13 @@ function getTmdbInfo(tmdbId, mediaType) {
     tmdbId: String(tmdbId)
   };
   var key = getTmdbApiKey();
-  if (!key)
+  if (!key) {
+    try { console.log("[DiziBox] TMDB anahtarı eksik; provider ayarlarından tmdbApiKey girin"); } catch (_) {
+    }
     return Promise.resolve(empty);
-  var url = TMDB_URL + "/" + type + "/" + encodeURIComponent(String(tmdbId)) +
-    "?api_key=" + encodeURIComponent(key) + "&append_to_response=external_ids,translations";
-  return fetchJson(url, { headers: API_HEADERS }, 20000).then(function(data) {
+  }
+  var requestInfo = tmdbRequest(type, tmdbId, key);
+  return fetchJson(requestInfo.url, { headers: requestInfo.headers }, 20000).then(function(data) {
     data = data || {};
     var translations = data.translations && Array.isArray(data.translations.translations) ? data.translations.translations : [];
     var tr = null;
@@ -744,7 +770,7 @@ function getDomainCandidates() {
     var domains = [];
     var entry = registry && registry.providers && registry.providers.dizibox;
     var remote = entry && Array.isArray(entry.domains) ? entry.domains : [];
-    var all = remote.concat([DEFAULT_DOMAIN]);
+    var all = remote.concat([DEFAULT_DOMAIN, "https://dizibox.live"]);
     for (var i = 0; i < all.length; i++) {
       var value = String(all[i] || "").replace(/\/+$/, "");
       if (/^https?:\/\/[^/\s]+$/i.test(value) && domains.indexOf(value) === -1)
@@ -805,12 +831,12 @@ function getSubtitles(tmdbId, mediaType, season, episode) {
 
 function onSettings() {
   return Promise.resolve([
-    { type: "header", label: "TMDB API Anahtarı (opsiyonel)" },
+    { type: "header", label: "TMDB API Anahtarı (gerekli)" },
     {
       type: "text",
       key: "tmdbApiKey",
-      label: "Kendi TMDB API anahtarın",
-      description: "Boş bırakırsan varsayılan anahtar kullanılır. Kendi TMDB v3 API anahtarını girersen bu sağlayıcı TMDB isteklerinde onu kullanır.",
+      label: "TMDB API Key veya Read Access Token",
+      description: "Başlık eşleştirmesi için kendi TMDB v3 API Key'ini veya v4 Read Access Token'ını gir.",
       defaultValue: ""
     }
   ]);
