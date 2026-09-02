@@ -145,18 +145,23 @@ var DEFAULT_TMDB_API_KEY = "";
 function getTmdbApiKey() {
   try {
     const settings = typeof globalThis !== "undefined" ? globalThis.SCRAPER_SETTINGS : null;
-    const userKey = (settings == null ? void 0 : settings.tmdbApiKey) ? String(settings.tmdbApiKey).trim() : "";
+    const userKey = settings && (settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey ||
+      settings.TMDB_API_KEY || settings.tmdbAccessToken || settings.tmdb_access_token || settings.tmdbToken);
     if (userKey)
-      return userKey;
+      return String(userKey).trim();
   } catch (e) {
   }
   try {
-    const injected = typeof globalThis !== "undefined" ? globalThis.TMDB_API_KEY : "";
+    const injected = typeof globalThis !== "undefined" ? (globalThis.TMDB_API_KEY || globalThis.TMDB_ACCESS_TOKEN ||
+      globalThis.TMDB_API_ACCESS_TOKEN || globalThis.__TMDB_API_KEY) : "";
     if (injected)
       return String(injected).trim();
   } catch (e) {
   }
   return DEFAULT_TMDB_API_KEY;
+}
+function isTmdbAccessToken(value) {
+  return /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(value || ""));
 }
 function tmdbApiKeySettingsLayout() {
   return [
@@ -194,8 +199,14 @@ function getTmdbInfo(tmdbId, mediaType) {
       () => __async(this, null, function* () {
         var _a, _b, _c, _d, _e, _f;
         try {
-          const url = `https://api.themoviedb.org/3/${type}/${tmdbId}?api_key=${apiKey}&append_to_response=external_ids,translations`;
-          const data = yield fetchJson(url);
+          let url = `https://api.themoviedb.org/3/${type}/${tmdbId}?append_to_response=external_ids,translations`;
+          const options = {};
+          if (isTmdbAccessToken(apiKey)) {
+            options.headers = { Accept: "application/json", Authorization: `Bearer ${apiKey}` };
+          } else {
+            url += `&api_key=${encodeURIComponent(apiKey)}`;
+          }
+          const data = yield fetchJson(url, options);
           let turkishTitle = "";
           const translations = ((_a = data.translations) == null ? void 0 : _a.translations) || [];
           const tr = translations.find((t) => t.iso_3166_1 === "TR" || t.iso_639_1 === "tr");
@@ -523,6 +534,8 @@ function titlesMatch(candidate, targets) {
 
 // src/hdfilmcehennemi/constants.js
 var DOMAIN_CANDIDATES = [
+  "https://hdfilmcehennemini.com",
+  "https://www.hdfilmcehennemini.com",
   "https://www.hdfilmcehennemi.nl",
   "https://hdfilmcehennemi.nl",
   "https://www.hdfilmcehennemi.ws",
@@ -536,6 +549,7 @@ var SITE_HEADERS2 = {
 
 // src/hdfilmcehennemi/index.js
 var REQUEST_TIMEOUT_MS = 15e3;
+var RESOLVE_TIMEOUT_MS = 45e3;
 function htmlUnescape(value) {
   return String(value || "").replace(/&quot;/gi, '"').replace(/&#34;/gi, '"').replace(/&#x27;|&#39;|&apos;/gi, "'").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&amp;/gi, "&");
 }
@@ -557,6 +571,25 @@ function absoluteUrl(value, base) {
   if (/^\//.test(raw))
     return `${base}${raw}`;
   return `${base}/${raw.replace(/^\/+/, "")}`;
+}
+function siteHost(url) {
+  return originOf(url).replace(/^https?:\/\//i, "").replace(/^www\./i, "").toLowerCase();
+}
+function sameSiteHost(left, right) {
+  return siteHost(left) === siteHost(right);
+}
+function isContentPageUrl(url, domain, includeEpisodes = false) {
+  if (!/^https?:\/\//i.test(String(url || "")) || !sameSiteHost(url, domain))
+    return false;
+  const match = String(url).match(/^https?:\/\/[^/]+(\/[^?#]*)?/i);
+  const path = (match && match[1] || "/").replace(/\/+$/, "") || "/";
+  if (path === "/" || /\.(?:css|js|json|xml|jpg|jpeg|png|gif|webp|svg|ico|woff2?)(?:$|[?#])/i.test(path))
+    return false;
+  if (/^\/(?:search|wp-json|feed|category|tag|page|author|iletisim|contact|giris|login|register|uyelik|wp-admin|populer-filmler|en-cok-izlenen|imdb-en-iyiler|film-arsivi|turkce-altyazili|turkce-dublaj|film-turleri|yabancidiziizle)(?:\/|$)/i.test(path))
+    return false;
+  if (!includeEpisodes && /\/(?:sezon|bolum)(?:[-_/]|$)/i.test(path))
+    return false;
+  return true;
 }
 function requestText(_0) {
   return __async(this, arguments, function* (url, options = {}) {
@@ -583,9 +616,7 @@ function extractAnchors(html, base, includeEpisodes = false) {
     if (!href)
       continue;
     const url = absoluteUrl(href, base);
-    if (!/^https?:\/\//i.test(url) || originOf(url).toLowerCase() !== base.toLowerCase())
-      continue;
-    if (!/(?:\/(?:film|movie|dizi|series)\/)/i.test(url) && !(includeEpisodes && /(?:sezon|bolum)/i.test(url)))
+    if (!isContentPageUrl(url, base, includeEpisodes))
       continue;
     const clean = url.split("#")[0];
     if (seen.has(clean))
@@ -597,11 +628,11 @@ function extractAnchors(html, base, includeEpisodes = false) {
 }
 function extractPlayerFrames(html, base) {
   const result = [], seen = /* @__PURE__ */ new Set();
-  const re = /<(?:iframe|frame|video)\b([^>]*)>/gi;
+  const re = /<(?:iframe|frame|video|embed|object)\b([^>]*)>/gi;
   let match;
   while ((match = re.exec(normalizeMediaText(html))) !== null) {
     const attrs = match[1] || "";
-    const attrRe = /\b(?:src|data-src|data-iframe|data-embed)\s*=\s*["']([^"']+)['"]/gi;
+    const attrRe = /\b(?:src|data|data-src|data-iframe|data-embed|data-url|data-player|data-href)\s*=\s*["']([^"']+)['"]/gi;
     let attr;
     while ((attr = attrRe.exec(attrs)) !== null) {
       const url = absoluteUrl(attr[1], base);
@@ -613,6 +644,23 @@ function extractPlayerFrames(html, base) {
   }
   return result;
 }
+function extractPlayerLinks(html, base) {
+  const result = [], seen = /* @__PURE__ */ new Set();
+  const re = /<a\b([^>]*)>/gi;
+  let match;
+  while ((match = re.exec(normalizeMediaText(html))) !== null) {
+    const attrs = match[1] || "";
+    const href = (attrs.match(/\bhref\s*=\s*["']([^"']+)["']/i) || [])[1] || "";
+    if (!href || !/(?:rapidrame|vidmoly|yabancidizim|rplayer|\/embed\/|\/player\/)/i.test(href))
+      continue;
+    const url = absoluteUrl(href, base);
+    if (!/^https?:\/\//i.test(url) || seen.has(url))
+      continue;
+    seen.add(url);
+    result.push(url);
+  }
+  return result;
+}
 function extractVideoEndpointUrls(html, pageUrl) {
   const result = [], seen = /* @__PURE__ */ new Set();
   const origin = originOf(pageUrl);
@@ -620,7 +668,7 @@ function extractVideoEndpointUrls(html, pageUrl) {
   let match;
   while ((match = re.exec(normalizeMediaText(html))) !== null) {
     const attrs = match[1] || "";
-    const value = (attrs.match(/\bdata-video\s*=\s*["']([^"']+)["']/i) || [])[1];
+    const value = (attrs.match(/\b(?:data-video|data-url|data-player|data-embed|data-iframe)\s*=\s*["']([^"']+)["']/i) || [])[1];
     if (!value)
       continue;
     const raw = /^https?:\/\//i.test(value) || /^\//.test(value) ? value : `${origin}/video/${encodeURIComponent(value)}/`;
@@ -690,14 +738,12 @@ function searchDomain(domain, targets) {
           } catch (e2) {
             got = [];
           }
-        }
+      }
       for (const row of got) {
         const url = absoluteUrl(row.url, domain);
-        if (!url || originOf(url).toLowerCase() !== domain.toLowerCase())
+        if (!isContentPageUrl(url, domain))
           continue;
         const title = row.title || url.split("/").filter(Boolean).pop().replace(/[-_]+/g, " ");
-        if (!/(?:\/(?:film|movie|dizi|series)\/)/i.test(url))
-          continue;
         if (!titlesMatch(title, targets) && !titlesMatch(url, targets))
           continue;
         const key = url.split("#")[0];
@@ -771,14 +817,14 @@ function normalizeMediaText(html) {
     }
   } catch (e) {
   }
-  return text.replace(/\\u003c/gi, "<").replace(/\\u003e/gi, ">").replace(/\\u0022/gi, '"').replace(/\\u0027/gi, "'").replace(/\\u0026/gi, "&").replace(/\\\//g, "/");
+  return text.replace(/\\u003c/gi, "<").replace(/\\u003e/gi, ">").replace(/\\u0022/gi, '"').replace(/\\u0027/gi, "'").replace(/\\u0026/gi, "&").replace(/\\u002f/gi, "/").replace(/\\u([0-9a-f]{4})/gi, (_, code) => String.fromCharCode(parseInt(code, 16))).replace(/\\x([0-9a-f]{2})/gi, (_, code) => String.fromCharCode(parseInt(code, 16))).replace(/\\\//g, "/").replace(/\\"/g, '"').replace(/\\'/g, "'");
 }
 function mediaScore(url) {
   const value = String(url || "");
   if (isAdMediaUrl(value))
     return -1000;
   let score = 0;
-  if (/\.m3u8(?:[?#]|$)|\/hls(?:[/?#]|$)/i.test(value))
+  if (/\.m3u8(?:[?#]|$)|\/(?:hls|playlist|stream)(?:[/?#]|$)/i.test(value))
     score += 100;
   if (/\.mp4(?:[?#]|$)/i.test(value))
     score += 60;
@@ -805,7 +851,7 @@ function directMediaUrls(html, base) {
   const text = normalizeMediaText(html);
   const add = (value) => {
     const url = mediaUrl(value, base);
-    if (!url || !/(?:\.m3u8(?:[?#]|$)|\.mp4(?:[?#]|$)|\/hls(?:[/?#]|$)|\/playlist(?:[/?#]|$))/i.test(url) || isAdMediaUrl(url) || seen.has(url))
+    if (!url || !/(?:\.m3u8(?:[?#]|$)|\.mp4(?:[?#]|$)|\/(?:hls|playlist|stream)(?:[/?#]|$))/i.test(url) || isAdMediaUrl(url) || seen.has(url))
       return;
     seen.add(url);
     result.push(url);
@@ -862,8 +908,6 @@ function probeHlsUrl(url, referer) {
   }).then((response) => {
     if (!response || response.status && response.status >= 400)
       throw new Error("HLS probe failed");
-    if (!responseLooksLikeVideo(response))
-      return false;
     return response.text().then((body) => {
       if (!/#EXTM3U/i.test(body))
         return false;
@@ -874,7 +918,14 @@ function probeHlsUrl(url, referer) {
         total += Number(durationMatch[1]) || 0;
       return total > 0 && total < 30 ? false : true;
     });
-  }).catch(() => null);
+  }).catch(() => isPlayerEndpointUrl(url) ? false : null);
+}
+function isPlayerEndpointUrl(url) {
+  const value = String(url || "");
+  const path = value.split(/[?#]/)[0];
+  if (/\.(?:m3u8|mp4|mkv)$/i.test(path))
+    return false;
+  return /\/(?:rplayer|rapidrame|vidmoly|embed|player|watch)(?:[/?#]|$)/i.test(path);
 }
 function probeMp4Url(url, referer) {
   const headers = __spreadProps(__spreadValues({}, SITE_HEADERS2), {
@@ -898,7 +949,7 @@ function probeMp4Url(url, referer) {
   }).then((response) => {
     const decision = assessMediaResponse(url, response);
     return decision === null ? true : decision;
-  }).catch(() => null));
+  }).catch(() => isPlayerEndpointUrl(url) ? false : null));
 }
 function filterMediaUrls(urls, referer) {
   const candidates = sortMediaUrls(urls);
@@ -907,7 +958,7 @@ function filterMediaUrls(urls, referer) {
   return Promise.all(candidates.map((url) => {
     if (isAdMediaUrl(url))
       return Promise.resolve({ url, keep: false, score: -1000 });
-    const probe = /\.m3u8(?:[?#]|$)|\/hls(?:[/?#]|$)/i.test(url) ?
+    const probe = /\.m3u8(?:[?#]|$)|\/(?:hls|playlist|stream)(?:[/?#]|$)/i.test(url) ?
       probeHlsUrl(url, referer) : probeMp4Url(url, referer);
     return probe.then((decision) => ({ url, keep: decision !== false, score: mediaScore(url) }));
   })).then((results) => results.filter((row) => row.keep).sort((a, b) => b.score - a.score).map((row) => row.url));
@@ -958,7 +1009,7 @@ function decodeVariant3(value) {
   return characterUnmix(rot13(decodeBase64(value).split("").reverse().join("")));
 }
 function isValidVideoUrl(value) {
-  return /^https?:\/\//i.test(value || "") && !isAdMediaUrl(value) && /(?:\.m3u8|\.mp4|\/hls(?:[/?#]|$)|\/playlist(?:[/?#]|$))/i.test(value);
+  return /^https?:\/\//i.test(value || "") && !isAdMediaUrl(value) && /(?:\.m3u8|\.mp4|\/(?:hls|playlist|stream)(?:[/?#]|$))/i.test(value);
 }
 function decodeVideoUrl(parts) {
   const joined = parts.join("");
@@ -1028,7 +1079,7 @@ function resolvePage(pageUrl, referer, depth = 0) {
     // may be a short ad MP4, so try the actual /video/{id}/ sources next.
     const children = [];
     const seen = /* @__PURE__ */ new Set();
-    for (const child of [...extractVideoEndpointUrls(html, pageUrl), ...extractPlayerFrames(html, pageOrigin)]) {
+    for (const child of [...extractVideoEndpointUrls(html, pageUrl), ...extractPlayerFrames(html, pageOrigin), ...extractPlayerLinks(html, pageOrigin)]) {
       if (!child || seen.has(child) || child === pageUrl)
         continue;
       seen.add(child);
@@ -1073,11 +1124,11 @@ function resolveTarget(tmdbId, mediaType, season, episode) {
 function getStreams(tmdbId, mediaType = "movie", season = 1, episode = 1) {
   return __async(this, null, function* () {
     try {
-      const resolved = yield resolveTarget(tmdbId, mediaType, season, episode);
+      const resolved = yield withTimeout(resolveTarget(tmdbId, mediaType, season, episode), RESOLVE_TIMEOUT_MS, "HDFilmCehennemi stream resolution");
       if (!resolved)
         return [];
       return resolved.streams.map((stream) => {
-        const type = /\.m3u8(?:\?|#|$)|\/hls(?:[/?#]|$)|\/playlist(?:[/?#]|$)/i.test(stream.url) ? "m3u8" : "mp4";
+        const type = /\.m3u8(?:\?|#|$)|\/(?:hls|playlist|stream)(?:[/?#]|$)/i.test(stream.url) ? "m3u8" : "mp4";
         const url = type === "m3u8" ? ensureHlsExtHint(stream.url) : stream.url;
         return {
           name: `HDFilmCehennemi \u2022 ${type.toUpperCase()}`,
@@ -1098,7 +1149,7 @@ function getStreams(tmdbId, mediaType = "movie", season = 1, episode = 1) {
 function getSubtitles(tmdbId, mediaType = "movie", season = 1, episode = 1) {
   return __async(this, null, function* () {
     try {
-      const resolved = yield resolveTarget(tmdbId, mediaType, season, episode);
+      const resolved = yield withTimeout(resolveTarget(tmdbId, mediaType, season, episode), RESOLVE_TIMEOUT_MS, "HDFilmCehennemi subtitle resolution");
       const result = [], seen = /* @__PURE__ */ new Set();
       for (const stream of (resolved == null ? void 0 : resolved.streams) || []) {
         for (const subtitle of stream.subtitles || []) {
