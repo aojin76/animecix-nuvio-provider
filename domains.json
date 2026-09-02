@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-02T00:00:00.000Z",
+  "updatedAt": "2026-09-02T14:00:00.000Z",
   "description": "Nuvio sağlayıcı alan adları. GitHub Actions doğrulanmış yeni alan adlarını günlük olarak arar.",
   "providers": {
     "animecix": {
@@ -28,8 +28,8 @@
       "status": "active"
     },
     "dizibox": {
-      "domains": ["https://www.dizibox.live", "https://dizibox.live"],
-      "allowedHost": "^(?:www\\.)?dizibox\\.live$",
+      "domains": ["https://www.dizibox.now", "https://dizibox.now", "https://www.dizibox.live", "https://dizibox.live"],
+      "allowedHost": "^(?:www\\.)?dizibox\\.(?:now|live)$",
       "signatures": ["dizibox"],
       "autoDiscover": false,
       "required": false,
