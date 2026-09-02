@@ -1,5 +1,5 @@
 /**
- * hdfilmcehennemi-1.0.4 - Built from src/hdfilmcehennemi/
+ * hdfilmcehennemi-1.0.5 - Built from src/hdfilmcehennemi/
  * Generated: 2026-09-02T13:31:38.184Z
  */
 var __defProp = Object.defineProperty;
@@ -548,8 +548,10 @@ var SITE_HEADERS2 = {
 };
 
 // src/hdfilmcehennemi/index.js
-var REQUEST_TIMEOUT_MS = 15e3;
-var RESOLVE_TIMEOUT_MS = 45e3;
+var REQUEST_TIMEOUT_MS = 7e3;
+var SEARCH_TIMEOUT_MS = 5e3;
+var CHILD_RESOLVE_TIMEOUT_MS = 7e3;
+var RESOLVE_TIMEOUT_MS = 25e3;
 function htmlUnescape(value) {
   return String(value || "").replace(/&quot;/gi, '"').replace(/&#34;/gi, '"').replace(/&#x27;|&#39;|&apos;/gi, "'").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&amp;/gi, "&");
 }
@@ -714,10 +716,11 @@ function ajaxSearchRows(text, base) {
 function searchDomain(domain, targets) {
   return __async(this, null, function* () {
     const rows = [], seen = /* @__PURE__ */ new Set();
-    for (const query of targets.slice(0, 3)) {
+    for (const query of targets.slice(0, 2)) {
       let got = [];
       try {
         const ajax = yield requestText(`${domain}/search/?q=${encodeURIComponent(query)}`, {
+          timeout: SEARCH_TIMEOUT_MS,
           headers: { Accept: "application/json", "X-Requested-With": "fetch", Referer: `${domain}/` }
         });
         got = ajaxSearchRows(ajax, domain);
@@ -726,13 +729,15 @@ function searchDomain(domain, targets) {
       if (!got.length)
         try {
           const json = yield requestText(`${domain}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&per_page=20`, {
-            headers: { Accept: "application/json", Referer: `${domain}/` }
+          timeout: SEARCH_TIMEOUT_MS,
+          headers: { Accept: "application/json", Referer: `${domain}/` }
           });
           got = jsonSearchRows(json);
         } catch (e) {
           try {
             const html = yield requestText(`${domain}/?s=${encodeURIComponent(query)}`, {
-              headers: { Referer: `${domain}/` }
+          timeout: SEARCH_TIMEOUT_MS,
+          headers: { Referer: `${domain}/` }
             });
             got = extractAnchors(html, domain);
           } catch (e2) {
@@ -1214,9 +1219,9 @@ function resolvePage(pageUrl, referer, depth = 0) {
         children.push(child);
       }
     }
-    for (const child of children) {
+    for (const child of children.slice(0, 6)) {
       try {
-        const streams = yield resolvePage(child, pageUrl, depth + 1);
+        const streams = yield withTimeout(resolvePage(child, pageUrl, depth + 1), CHILD_RESOLVE_TIMEOUT_MS, "HDFilmCehennemi player traversal");
         if (streams.length)
           return streams;
       } catch (e) {
@@ -1225,32 +1230,50 @@ function resolvePage(pageUrl, referer, depth = 0) {
     return [];
   });
 }
-function resolveTarget(tmdbId, mediaType, season, episode) {
-  return __async(this, null, function* () {
-    const type = mediaType === "tv" ? "tv" : "movie";
-    const info = yield getTmdbInfo(tmdbId, type);
-    const targets = [...new Set([info.turkishTitle, info.title, info.originalTitle].filter(Boolean))];
-    if (!targets.length)
-      return null;
-    const domains = yield getDomainCandidates("hdfilmcehennemi", DOMAIN_CANDIDATES);
-    for (const domain of domains) {
-      const candidates = yield searchDomain(domain, targets);
-      for (const candidate of candidates.slice(0, 5)) {
-        const pageUrl = yield pageForTarget(candidate, domain, type, season || 1, episode || 1);
-        if (!pageUrl)
-          continue;
-        try {
-          const streams = yield resolvePage(pageUrl, `${domain}/`);
-          if (streams.length)
-            return { title: candidate.title || info.title, streams };
-        } catch (e) {
-        }
+function firstSuccessful(tasks) {
+  return new Promise((resolve) => {
+    if (!tasks.length) { resolve(null); return; }
+    let pending = tasks.length;
+    let finished = false;
+    const rejected = () => {
+      pending -= 1;
+      if (!pending && !finished) { finished = true; resolve(null); }
+    };
+    for (const task of tasks) {
+      Promise.resolve().then(task).then((value) => {
+        if (finished) return;
+        if (value) { finished = true; resolve(value); return; }
+        rejected();
+      }).catch(rejected);
+    }
+  });
+}
+function resolveDomainTarget(domain, targets, type, season, episode, info) {
+  return __async(this, arguments, function* (domain, targets, type, season, episode, info) {
+    const candidates = yield searchDomain(domain, targets);
+    for (const candidate of candidates.slice(0, 3)) {
+      const pageUrl = yield pageForTarget(candidate, domain, type, season || 1, episode || 1);
+      if (!pageUrl) continue;
+      try {
+        const streams = yield resolvePage(pageUrl, `${domain}/`);
+        if (streams.length) return { title: candidate.title || info.title, streams };
+      } catch (e) {
       }
     }
     return null;
   });
 }
-function getStreams(tmdbId, mediaType = "movie", season = 1, episode = 1) {
+function resolveTarget(tmdbId, mediaType, season, episode) {
+  return __async(this, null, function* () {
+    const type = mediaType === "tv" ? "tv" : "movie";
+    const info = yield getTmdbInfo(tmdbId, type);
+    const targets = [...new Set([info.turkishTitle, info.title, info.originalTitle].filter(Boolean))];
+    if (!targets.length) return null;
+    const domains = (yield getDomainCandidates("hdfilmcehennemi", DOMAIN_CANDIDATES)).slice(0, 3);
+    const tasks = domains.map((domain) => () => resolveDomainTarget(domain, targets, type, season || 1, episode || 1, info));
+    return yield firstSuccessful(tasks);
+  });
+}function getStreams(tmdbId, mediaType = "movie", season = 1, episode = 1) {
   return __async(this, null, function* () {
     try {
       const resolved = yield withTimeout(resolveTarget(tmdbId, mediaType, season, episode), RESOLVE_TIMEOUT_MS, "HDFilmCehennemi stream resolution");

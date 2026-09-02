@@ -1,5 +1,5 @@
 /**
- * dizibox - Nuvio provider
+ * dizibox-1.0.5 - Nuvio provider
  *
  * DiziBox episode pages expose a king.php iframe.  That page points to a
  * MolyStream embed whose HTML is encrypted with CryptoJS AES using the
@@ -20,7 +20,7 @@ var DEFAULT_DOMAIN_CANDIDATES = [
 var REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
 var TMDB_URL = "https://api.themoviedb.org/3";
 var PROVIDER_VERSION = "1.0.4";
-var RESOLVE_TIMEOUT_MS = 45000;
+var RESOLVE_TIMEOUT_MS = 30000;
 var DEFAULT_TMDB_API_KEY = "";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 var PAGE_HEADERS = {
@@ -344,7 +344,7 @@ function extractIframeSources(html, base) {
     var srcMatch;
     while ((srcMatch = srcRe.exec(attrs)) !== null) {
       var url = absoluteUrl(srcMatch[2], base);
-      if (!/^https?:\/\//i.test(url) || seen[url])
+      if (!/^https?:\/\//i.test(url) || isAdMediaUrl(url) || seen[url])
         continue;
       seen[url] = true;
       result.push(url);
@@ -466,7 +466,7 @@ function ensureHlsExtHint(url) {
   return value + (value.indexOf("?") >= 0 ? "&" : "?") + "ext=video.m3u8";
 }
 
-var AD_MEDIA_URL_RE = /(?:^|[./?&#_=:\-])(?:ad|ads|advert|advertisement|banner|commercial|promo|preview|trailer|teaser|bumper|preroll|pre-roll|interstitial|sponsor|luxbet|peacock|casino|betting|countdown|splash|watermark|logo)(?:[./?&#_=:\-]|$)/i;
+var AD_MEDIA_URL_RE = /(?:^|[./?&#_=:\-])(?:ad|ads|advert|advertisement|reklam|reklamlar|banner|commercial|promo|preview|trailer|teaser|bumper|preroll|pre-roll|interstitial|sponsor|binomo|binomoreklam|advid|advidprox|adskeeper|popunder|clickunder|luxbet|peacock|casino|betting|countdown|splash|watermark|logo)(?:[./?&#_=:\-]|$)/i;
 var MIN_EPISODE_BYTES = 8 * 1024 * 1024;
 
 function isAdMediaUrl(url) {
@@ -1090,6 +1090,8 @@ function resolveTarget(tmdbId, mediaType, season, episode) {
     if (!slugs.length)
       return null;
     return getDomainCandidates().then(function(domains) {
+      domains = domains.slice(0, 3);
+      slugs = slugs.slice(0, 5);
       var domainIndex = 0;
       function nextDomain() {
         if (domainIndex >= domains.length)

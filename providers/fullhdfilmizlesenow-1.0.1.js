@@ -1,5 +1,5 @@
 /**
- * fullhdfilmizlesenow - Built from src/fullhdfilmizlesenow/
+ * fullhdfilmizlesenow-1.0.1 - Built from src/fullhdfilmizlesenow/
  * Generated: 2026-09-02T13:31:38.175Z
  */
 var __defProp = Object.defineProperty;
@@ -141,7 +141,7 @@ function createTtlCache(defaultTtlMs = 30 * 60 * 1e3, maxEntries = 200) {
 
 // src/shared/tmdb.js
 var tmdbInfoCache = createTtlCache(30 * 60 * 1e3, 300);
-var DEFAULT_TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
+var DEFAULT_TMDB_API_KEY = "";
 function getTmdbApiKey() {
   try {
     const settings = typeof globalThis !== "undefined" ? globalThis.SCRAPER_SETTINGS : null;
@@ -894,6 +894,117 @@ function extractGenericStream(embedUrl, referer, hostName) {
     }));
   });
 }
+function extractGenericStream(embedUrl, referer, hostName) {
+  return __async(this, null, function* () {
+    let html;
+    try {
+      html = yield fetchText(embedUrl, { headers: { Referer: referer } });
+    } catch (e) {
+      return [];
+    }
+    const found = /* @__PURE__ */ new Set();
+    const patterns = [
+      /https?:\/\/[^"'\\\s<>]+?\.m3u8[^"'\\\s<>]*/gi,
+      /https?:\/\/[^"'\\\s<>]+?\.mp4[^"'\\\s<>]*/gi,
+      /["']file["']\s*[:=]\s*["'](https?:[^"']+)["']/gi,
+      /["']src["']\s*[:=]\s*["'](https?:[^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
+      /source\s+src=["'](https?:[^"']+)["']/gi
+    ];
+    for (const re of patterns) {
+      let m;
+      while ((m = re.exec(html)) !== null) {
+        const url = (m[1] || m[0]).replace(/\\u0026/g, "&").replace(/\\\//g, "/");
+        if (/^https?:\/\//.test(url) && !isAdMediaUrl(url) && !/google|facebook|analytics|parklogic/i.test(url)) {
+          found.add(url);
+        }
+      }
+    }
+    const origin = originOf(embedUrl);
+    return [...found].map((url) => ({
+      url,
+      host: hostName || "Embed",
+      type: /\.m3u8/i.test(url) ? "m3u8" : "mp4",
+      headers: { Referer: origin ? `${origin}/` : referer },
+      subtitles: collectSubtitles(html)
+    }));
+  });
+}
+
+function fullHdHeaderValue(response, name) {
+  try {
+    return response && response.headers && typeof response.headers.get === "function" ? String(response.headers.get(name) || "") : "";
+  } catch (e) {
+    return "";
+  }
+}
+function fullHdResponseTotalBytes(response) {
+  const range = fullHdHeaderValue(response, "content-range").match(/\/([0-9]+)\s*$/);
+  if (range)
+    return Number(range[1]);
+  const length = Number(fullHdHeaderValue(response, "content-length"));
+  return isFinite(length) && length > 0 ? length : 0;
+}
+function fullHdResponseLooksLikeVideo(response) {
+  const type = fullHdHeaderValue(response, "content-type");
+  return !type || /(?:^|\/)video\//i.test(type) || /application\/(?:octet-stream|mp4|vnd\.apple\.mpegurl|x-mpegurl)/i.test(type);
+}
+function fullHdAssessMediaResponse(url, response) {
+  if (!response || response.status && response.status >= 400)
+    return null;
+  if (!fullHdResponseLooksLikeVideo(response))
+    return false;
+  const total = fullHdResponseTotalBytes(response);
+  if (/\.mp4(?:[?#]|$)/i.test(url) && total && total < MIN_EPISODE_BYTES)
+    return false;
+  return true;
+}
+function fullHdProbeMediaUrl(url, referer) {
+  const value = String(url || "");
+  if (!/^https?:\/\//i.test(value) || isAdMediaUrl(value))
+    return Promise.resolve(false);
+  const headers = __spreadProps(__spreadValues({}, SITE_HEADERS2), {
+    Accept: "video/mp4,video/*;q=0.9,*/*;q=0.7",
+    Referer: referer || "",
+    Origin: originOf(referer || value)
+  });
+  if (/\.m3u8(?:[?#]|$)/i.test(value) || /[?&]ext=video\.m3u8/i.test(value)) {
+    return fetch(value, {
+      method: "GET",
+      headers: __spreadProps(__spreadValues({}, headers), {
+        Accept: "application/vnd.apple.mpegurl,application/x-mpegURL,text/plain,*/*;q=0.8"
+      }),
+      signal: timeoutSignal(5500)
+    }).then((response) => {
+      if (!response || response.status && response.status >= 400)
+        throw new Error("HLS probe failed");
+      return response.text();
+    }).then((body) => {
+      if (!/#EXTM3U/i.test(body))
+        return false;
+      let duration = 0;
+      const durationRe = /#EXTINF\s*:\s*([0-9]+(?:\.[0-9]+)?)/gi;
+      let match;
+      while ((match = durationRe.exec(String(body || ""))) !== null)
+        duration += Number(match[1]) || 0;
+      return !(duration > 0 && duration < 30);
+    }).catch(() => null);
+  }
+  const assess = (response) => {
+    const decision = fullHdAssessMediaResponse(value, response);
+    if (decision === null)
+      throw new Error("MP4 probe unavailable");
+    return decision;
+  };
+  return fetch(value, {
+    method: "HEAD",
+    headers,
+    signal: timeoutSignal(4500)
+  }).then(assess).catch(() => fetch(value, {
+    method: "GET",
+    headers: __spreadProps(__spreadValues({}, headers), { Range: "bytes=0-0" }),
+    signal: timeoutSignal(4500)
+  }).then(assess)).catch(() => null);
+}
 var HOST_REWRITES = [
   [/^(https?:\/\/)(?:www\.)?watch\.trplayer\.site(\/|$)/i, "$1watch.trplayer.com$2"],
   [/^(https?:\/\/)(?:www\.)?trplayer\.site(\/|$)/i, "$1watch.trplayer.com$2"],
@@ -954,8 +1065,14 @@ var SITE_HEADERS2 = {
 };
 
 // src/fullhdfilmizlesenow/index.js
-var REQUEST_TIMEOUT_MS = 15e3;
+var REQUEST_TIMEOUT_MS = 7e3;
+var RESOLVE_TIMEOUT_MS = 25e3;
 var AD_HOST_KEYS = /* @__PURE__ */ new Set(["advid", "advidprox"]);
+var AD_MEDIA_URL_RE = /(?:^|[./?&#_=:\-])(?:ad|ads|advert|advertisement|reklam|reklamlar|banner|commercial|promo|preview|trailer|teaser|bumper|preroll|pre-roll|interstitial|sponsor|binomo|binomoreklam|advid|advidprox|adskeeper|popunder|clickunder|luxbet|peacock|casino|betting|countdown|splash|watermark|logo)(?:[./?&#_=:\-]|$)/i;
+var MIN_EPISODE_BYTES = 8 * 1024 * 1024;
+function isAdMediaUrl(url) {
+  return AD_MEDIA_URL_RE.test(String(url || ""));
+}
 function requestText(_0) {
   return __async(this, arguments, function* (url, options = {}) {
     return yield withTimeout((() => __async(this, null, function* () {
@@ -1004,7 +1121,7 @@ function scoreRow(row, targets, year) {
 function searchDomain(domain, targets, year) {
   return __async(this, null, function* () {
     const rows = [], seen = /* @__PURE__ */ new Set();
-    for (const query of targets.slice(0, 3)) {
+    for (const query of targets.slice(0, 2)) {
       let text;
       try {
         text = yield requestText(`${domain}/autocomplete/q.php?q=${encodeURIComponent(query)}`, {
@@ -1129,7 +1246,7 @@ function collectFallbackEmbeds(html) {
   let match;
   while ((match = re.exec(String(html || ""))) !== null) {
     const url = unescapeJson(match[1]);
-    if (seen.has(url) || /google|facebook|analytics|gstatic/i.test(url))
+    if (seen.has(url) || isAdMediaUrl(url) || /google|facebook|analytics|gstatic/i.test(url))
       continue;
     seen.add(url);
     result.push({ encoded: "", url, label: "Embed", language: "T\xFCrk\xE7e" });
@@ -1138,16 +1255,16 @@ function collectFallbackEmbeds(html) {
 }
 function resolvePage(row, pageUrl, domain) {
   return __async(this, null, function* () {
-    const html = yield requestText(pageUrl, { headers: { Referer: `${domain}/` } });
+    const html = yield requestText(pageUrl, { headers: { Referer: domain + "/" } });
     let entries = flattenScx(extractScx(html));
     if (!entries.length)
       entries = collectFallbackEmbeds(html);
     if (!entries.length)
       return [];
     const streams = [], seen = /* @__PURE__ */ new Set();
-    for (const entry of entries.slice(0, 10)) {
+    for (const entry of entries.slice(0, 6)) {
       const embedUrl = entry.url || decodeScxLink(entry.encoded);
-      if (!/^https?:\/\//i.test(embedUrl))
+      if (!/^https?:\/\//i.test(embedUrl) || isAdMediaUrl(embedUrl))
         continue;
       let resolved;
       try {
@@ -1155,18 +1272,32 @@ function resolvePage(row, pageUrl, domain) {
       } catch (e) {
         resolved = [];
       }
+      const candidates = [];
+      const candidateSeen = /* @__PURE__ */ new Set();
       for (const stream of resolved || []) {
-        if (!(stream == null ? void 0 : stream.url) || seen.has(stream.url))
+        const streamUrl = String(stream && stream.url || "");
+        if (!/^https?:\/\//i.test(streamUrl) || isAdMediaUrl(streamUrl) || candidateSeen.has(streamUrl))
           continue;
-        seen.add(stream.url);
+        candidateSeen.add(streamUrl);
+        candidates.push({ stream, url: streamUrl });
+      }
+      const decisions = yield Promise.all(candidates.map((candidate) => fullHdProbeMediaUrl(candidate.url, pageUrl)));
+      for (let index = 0; index < candidates.length; index++) {
+        if (decisions[index] === false)
+          continue;
+        const stream = candidates[index].stream;
+        const streamUrl = candidates[index].url;
+        if (seen.has(streamUrl))
+          continue;
+        seen.add(streamUrl);
         const subtitles = Array.isArray(stream.subtitles) ? stream.subtitles : [];
         streams.push({
-          url: ensureHlsExtHint(stream.url),
-          type: stream.type || (/\.m3u8/i.test(stream.url) ? "m3u8" : "mp4"),
+          url: ensureHlsExtHint(streamUrl),
+          type: stream.type || (/\.m3u8/i.test(streamUrl) ? "m3u8" : "mp4"),
           quality: stream.quality || "Auto",
           headers: stream.headers || {},
           subtitles,
-          name: `FullHDFilmizlesene ${entry.language}${entry.part ? ` \u2022 Part ${entry.part}` : ""} \u2022 ${stream.host || "Kaynak"}`
+          name: "FullHDFilmizlesene " + entry.language + (entry.part ? " • Part " + entry.part : "") + " • " + (stream.host || "Kaynak")
         });
       }
     }
@@ -1181,10 +1312,10 @@ function resolveTarget(tmdbId, mediaType) {
     const targets = [...new Set([info.turkishTitle, info.title, info.originalTitle].filter(Boolean))];
     if (!targets.length)
       return null;
-    const domains = yield getDomainCandidates("fullhdfilmizlesenow", DOMAIN_CANDIDATES);
+    const domains = (yield getDomainCandidates("fullhdfilmizlesenow", DOMAIN_CANDIDATES)).slice(0, 2);
     for (const domain of domains) {
       const rows = yield searchDomain(domain, targets, info.year);
-      for (const row of rows.slice(0, 5)) {
+      for (const row of rows.slice(0, 3)) {
         const pageUrl = buildPageUrl(domain, row);
         if (!pageUrl)
           continue;
@@ -1202,7 +1333,7 @@ function resolveTarget(tmdbId, mediaType) {
 function getStreams(tmdbId, mediaType = "movie") {
   return __async(this, null, function* () {
     try {
-      const resolved = yield resolveTarget(tmdbId, mediaType);
+      const resolved = yield withTimeout(resolveTarget(tmdbId, mediaType), RESOLVE_TIMEOUT_MS, "FullHDFilmizlesene stream resolution");
       if (!resolved)
         return [];
       return resolved.streams.map((stream) => ({
@@ -1223,7 +1354,7 @@ function getStreams(tmdbId, mediaType = "movie") {
 function getSubtitles(tmdbId, mediaType = "movie") {
   return __async(this, null, function* () {
     try {
-      const resolved = yield resolveTarget(tmdbId, mediaType);
+      const resolved = yield withTimeout(resolveTarget(tmdbId, mediaType), RESOLVE_TIMEOUT_MS, "FullHDFilmizlesene subtitle resolution");
       const result = [], seen = /* @__PURE__ */ new Set();
       for (const stream of (resolved == null ? void 0 : resolved.streams) || []) {
         for (const subtitle of stream.subtitles || []) {
