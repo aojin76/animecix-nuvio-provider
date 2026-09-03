@@ -10,7 +10,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const manifest = JSON.parse(read("manifest.json"));
 const packageJson = JSON.parse(read("package.json"));
 
-assert.equal(manifest.version, "2.12.1");
+assert.equal(manifest.version, "2.12.2");
 assert.equal(packageJson.version, manifest.version);
 assert.equal(packageJson.engines && packageJson.engines.node, ">=24");
 assert.ok(Array.isArray(manifest.scrapers) && manifest.scrapers.length > 0);
@@ -79,14 +79,27 @@ assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /decisions\[index\]
 assert.match(read("providers/dizibox-1.0.5.js"), /PROVIDER_VERSION = "1.0.5"/);
 assert.match(read("providers/dizibox-1.0.5.js"), /reklam\|reklamlar/);
 assert.match(read("providers/dizibox-1.0.5.js"), /keep: decision === true/);
-assert.match(read("providers/animelercc-1.0.6.js"), /playerTypeForUrl/);
-assert.ok(read("providers/animelercc-1.0.6.js").includes("application/vnd.apple.mpegurl"));
+assert.match(read("providers/animelercc-1.0.7.js"), /playerTypeForUrl/);
+assert.ok(read("providers/animelercc-1.0.7.js").includes("application/vnd.apple.mpegurl"));
 assert.ok(manifest.scrapers.find((scraper) => scraper.id === "animelercc").formats.includes("m3u8"));
 assert.match(read("providers/filmmakinesi-1.0.0.js"), /SITE_ID = "filmmakinesi"/);
 assert.match(read("providers/filmmakinesi-1.0.0.js"), /decisions\[i\] !== true/);
 assert.match(read("providers/720izle-1.0.0.js"), /hotAesDecrypt/);
 assert.match(read("providers/720izle-1.0.0.js"), /hlsLooksLikeLongMedia/);
 assert.match(read("providers/720izle-1.0.0.js"), /decisions\[i\] !== true/);
+
+
+const animecixSource = read("providers/animecix-2.5.1.js");
+const animexeSource = read("providers/animexe-1.0.4.js");
+const animelerccSource = read("providers/animelercc-1.0.7.js");
+assert.match(animecixSource, /return isBleachTybw\(tmdbId, info\);/);
+assert.doesNotMatch(animecixSource, /return isBleach\(tmdbId, info\) && s > 1/);
+assert.doesNotMatch(animecixSource, /if \(s === 17\)/);
+assert.doesNotMatch(animecixSource, /e > BLEACH_SEASON_COUNTS\[1\]/);
+assert.match(animexeSource, /return isBleachTybw\(info\);/);
+assert.doesNotMatch(animexeSource, /return isBleachMain\(info\) && s > 1/);
+assert.match(animelerccSource, /return isBleachTybw\(info\);/);
+assert.doesNotMatch(animelerccSource, /return isBleachMain\(info\) && s > 1/);
 
 
 
