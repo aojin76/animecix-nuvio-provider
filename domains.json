@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-02T20:30:00.000Z",
+  "updatedAt": "2026-09-03T10:50:28.263Z",
   "description": "Nuvio sağlayıcı alan adları. GitHub Actions doğrulanmış yeni alan adlarını günlük olarak arar.",
   "providers": {
     "animecix": {
@@ -56,10 +56,10 @@
     },
     "hdfilmcehennemi": {
       "domains": [
-        "https://www.hdfilmcehennemi.nl",
-        "https://hdfilmcehennemi.nl",
         "https://hdfilmcehennemini.com",
         "https://www.hdfilmcehennemini.com",
+        "https://www.hdfilmcehennemi.nl",
+        "https://hdfilmcehennemi.nl",
         "https://www.hdfilmcehennemi.ws",
         "https://hdfilmcehennemi.ws"
       ],
@@ -73,7 +73,7 @@
       ],
       "autoDiscover": true,
       "required": false,
-      "status": "blocked-cloudflare"
+      "status": "active"
     },
     "fullhdfilmizlesenow": {
       "domains": [
