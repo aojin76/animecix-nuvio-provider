@@ -1,6 +1,6 @@
 {
   "name": "Animecix Nuvio",
-  "version": "2.12.0",
+  "version": "2.12.1",
   "scrapers": [
     {
       "id": "animecix",
@@ -103,13 +103,13 @@
       "id": "hdfilmcehennemi",
       "name": "HDFilmCehennemi",
       "description": "HDFilmCehennemi film ve dizi kaynağı; alan adı otomatik yenilenir",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "author": "aojin76",
       "supportedTypes": [
         "movie",
         "tv"
       ],
-      "filename": "providers/hdfilmcehennemi-1.0.5.js",
+      "filename": "providers/hdfilmcehennemi-1.0.6.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://www.hdfilmcehennemi.nl/favicon.ico",
