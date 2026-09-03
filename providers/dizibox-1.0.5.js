@@ -19,7 +19,7 @@ var DEFAULT_DOMAIN_CANDIDATES = [
 ];
 var REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
 var TMDB_URL = "https://api.themoviedb.org/3";
-var PROVIDER_VERSION = "1.0.4";
+var PROVIDER_VERSION = "1.0.5";
 var RESOLVE_TIMEOUT_MS = 30000;
 var DEFAULT_TMDB_API_KEY = "";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
@@ -650,7 +650,7 @@ function filterMediaUrls(urls, referer) {
       return Promise.resolve({ url: url, keep: false });
     var probe = sourceType(url) === "m3u8" ? probeHlsUrl(url, referer) : probeMp4Url(url, referer);
     return probe.then(function(decision) {
-      return { url: url, keep: decision !== false, score: mediaScore(url) };
+      return { url: url, keep: decision === true, score: mediaScore(url) };
     });
   })).then(function(results) {
     return results.filter(function(row) { return row.keep; }).sort(function(a, b) {

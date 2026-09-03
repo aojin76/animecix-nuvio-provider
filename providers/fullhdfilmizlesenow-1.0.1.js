@@ -160,12 +160,12 @@ function getTmdbApiKey() {
 }
 function tmdbApiKeySettingsLayout() {
   return [
-    { type: "header", label: "TMDB API Anahtar\u0131 (opsiyonel)" },
+    { type: "header", label: "TMDB API Anahtarı (gerekli)" },
     {
       type: "text",
       key: "tmdbApiKey",
-      label: "Kendi TMDB API anahtar\u0131n",
-      description: "Bo\u015F b\u0131rak\u0131rsan payla\u015F\u0131lan varsay\u0131lan anahtar kullan\u0131l\u0131r. Kendi TMDB v3 API anahtar\u0131n\u0131 girersen (themoviedb.org hesab\u0131ndan \xFCcretsiz al\u0131n\u0131r) bu ekrandaki t\xFCm TMDB istekleri onunla yap\u0131l\u0131r.",
+      label: "Kendi TMDB API anahtarın",
+      description: "Başlık eşleştirmesi için kendi TMDB v3 API anahtarını veya v4 Read Access Token'ını gir. Nuvio ortamında global TMDB_API_KEY sağlanıyorsa bu da kullanılabilir.",
       defaultValue: ""
     }
   ];
@@ -1283,7 +1283,7 @@ function resolvePage(row, pageUrl, domain) {
       }
       const decisions = yield Promise.all(candidates.map((candidate) => fullHdProbeMediaUrl(candidate.url, pageUrl)));
       for (let index = 0; index < candidates.length; index++) {
-        if (decisions[index] === false)
+        if (decisions[index] !== true)
           continue;
         const stream = candidates[index].stream;
         const streamUrl = candidates[index].url;

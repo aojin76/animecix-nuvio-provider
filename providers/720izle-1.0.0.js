@@ -1926,7 +1926,7 @@ function resolvePage(pageUrl, domain, mediaType, season, episode, title) {
         return fullHdProbeMediaUrl(candidate.url, pageUrl);
       }));
       for (var i = 0; i < candidates.length; i++) {
-        if (decisions[i] === false)
+        if (decisions[i] !== true)
           continue;
         var item = candidates[i].stream;
         var streamUrl = candidates[i].url;
