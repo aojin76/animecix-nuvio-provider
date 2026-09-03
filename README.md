@@ -17,7 +17,7 @@ Provider'lar üçüncü taraf sitelerin güncel HTML ve oynatıcı yapılarına 
 
 ## Güncel sürüm
 
-Manifest: 2.12.0
+Manifest: 2.12.1
 
 Provider bundle'ları manifest tarafından doğrudan yüklenir. Yeni değişikliklerde ilgili provider sürümü ve manifest filename alanı birlikte güncellenmelidir.
 

@@ -1,5 +1,5 @@
 /**
- * hdfilmcehennemi-1.0.5 - Built from src/hdfilmcehennemi/
+ * hdfilmcehennemi-1.0.6 - Built from src/hdfilmcehennemi/
  * Generated: 2026-09-02T13:31:38.184Z
  */
 var __defProp = Object.defineProperty;
@@ -506,11 +506,24 @@ var TR_ASCII_MAP = {
 function asciiFold(value) {
   return String(value || "").replace(/[çÇğĞıİöÖşŞüÜâÂîÎûÛ]/g, (c) => TR_ASCII_MAP[c] || c);
 }
+var ROMAN_NUMERAL_MAP = {
+  ii: "2",
+  iii: "3",
+  iv: "4",
+  v: "5",
+  vi: "6",
+  vii: "7",
+  viii: "8",
+  ix: "9"
+};
+function normalizeTitleText(value) {
+  return asciiFold(value).toLowerCase().replace(/\b(viii|vii|vi|iv|iii|ii|ix|v)\b/g, (_, roman) => ROMAN_NUMERAL_MAP[roman] || roman);
+}
 function normalizeTitle(value) {
-  return asciiFold(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+  return normalizeTitleText(value).replace(/[^a-z0-9]/g, "");
 }
 function tokenizeTitle(value) {
-  return asciiFold(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+  return normalizeTitleText(value).replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
 }
 function tokenSubsetMatch(candidateTokens, targetTokens) {
   if (targetTokens.length < 2)
@@ -530,6 +543,35 @@ function titlesMatch(candidate, targets) {
     }
     return tokenSubsetMatch(candidateTokens, tokenizeTitle(t));
   });
+}
+function searchTitleVariants(targets) {
+  const result = [];
+  const add = (value) => {
+    const text = String(value || "").trim();
+    if (text && !result.includes(text))
+      result.push(text);
+  };
+  for (const target of targets || []) {
+    const text = String(target || "").trim();
+    add(text);
+    add(text.replace(/\b2\b/g, "II"));
+    add(text.replace(/\bII\b/gi, "2"));
+    add(text.replace(/\b3\b/g, "III"));
+    add(text.replace(/\bIII\b/gi, "3"));
+    add(text.replace(/\b4\b/g, "IV"));
+    add(text.replace(/\bIV\b/gi, "4"));
+    add(text.replace(/\b5\b/g, "V"));
+    add(text.replace(/\bV\b/gi, "5"));
+    add(text.replace(/\b6\b/g, "VI"));
+    add(text.replace(/\bVI\b/gi, "6"));
+    add(text.replace(/\b7\b/g, "VII"));
+    add(text.replace(/\bVII\b/gi, "7"));
+    add(text.replace(/\b8\b/g, "VIII"));
+    add(text.replace(/\bVIII\b/gi, "8"));
+    add(text.replace(/\b9\b/g, "IX"));
+    add(text.replace(/\bIX\b/gi, "9"));
+  }
+  return result;
 }
 
 // src/hdfilmcehennemi/constants.js
@@ -706,17 +748,26 @@ function ajaxSearchRows(text, base) {
     return data.results.map((fragment) => {
       const html = String(fragment || "");
       const href = (html.match(/\bhref\s*=\s*["']([^"']+)["']/i) || [])[1] || "";
-      const title = stripTags((html.match(/<h4[^>]*class=["'][^"']*title[^"']*["'][^>]*>([\s\S]*?)<\/h4>/i) || [])[1]) || ((html.match(/\balt\s*=\s*["']([^"']+)["']/i) || [])[1] || "");
+      const title = stripTags((html.match(/<h4[^>]*class=["'][^"']*title[^"']*["'][^>]*>([\s\S]*?)<\/h4>/i) || [])[1]) || stripTags((html.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i) || [])[1]) || ((html.match(/\b(?:alt|data-title|title)\s*=\s*["']([^"']+)["']/i) || [])[1] || "");
       return { url: absoluteUrl(href, base), title };
     });
   } catch (e) {
     return [];
   }
 }
-function searchDomain(domain, targets) {
+function candidateYearMatches(row, year) {
+  const wanted = Number(String(year || "").slice(0, 4));
+  if (!Number.isInteger(wanted) || wanted < 1900 || wanted > 2100)
+    return true;
+  const text = `${row && row.title || ""} ${row && row.url || ""}`;
+  const years = (text.match(/\b(?:19|20)\d{2}\b/g) || []).map(Number);
+  return !years.length || years.some((value) => Math.abs(value - wanted) <= 1);
+}
+function searchDomain(domain, targets, year) {
   return __async(this, null, function* () {
     const rows = [], seen = /* @__PURE__ */ new Set();
-    for (const query of targets.slice(0, 2)) {
+    const queries = searchTitleVariants(targets);
+    for (const query of queries.slice(0, 4)) {
       let got = [];
       try {
         const ajax = yield requestText(`${domain}/search/?q=${encodeURIComponent(query)}`, {
@@ -751,6 +802,8 @@ function searchDomain(domain, targets) {
         const title = row.title || url.split("/").filter(Boolean).pop().replace(/[-_]+/g, " ");
         if (!titlesMatch(title, targets) && !titlesMatch(url, targets))
           continue;
+        if (!candidateYearMatches({ title, url }, year))
+          continue;
         const key = url.split("#")[0];
         if (seen.has(key))
           continue;
@@ -758,15 +811,17 @@ function searchDomain(domain, targets) {
         rows.push({ url: key, title });
       }
     }
-    rows.sort((a, b) => scoreCandidate(b, targets) - scoreCandidate(a, targets));
+    rows.sort((a, b) => scoreCandidate(b, targets, year) - scoreCandidate(a, targets, year));
     return rows;
   });
 }
-function scoreCandidate(row, targets) {
+function scoreCandidate(row, targets, year) {
   const text = `${row.title} ${row.url}`;
   const exact = targets.map(normalizeTitle).filter(Boolean).some((value) => normalizeTitle(row.title) === value);
   const loose = titlesMatch(text, targets);
-  return exact ? 8 : loose ? 3 : 0;
+  const wanted = String(year || "").slice(0, 4);
+  const yearBoost = wanted && text.includes(wanted) ? 2 : 0;
+  return (exact ? 8 : loose ? 3 : 0) + yearBoost;
 }
 function episodeUrlFromSeries(html, domain, season, episode) {
   var _a;
@@ -1250,7 +1305,7 @@ function firstSuccessful(tasks) {
 }
 function resolveDomainTarget(domain, targets, type, season, episode, info) {
   return __async(this, arguments, function* (domain, targets, type, season, episode, info) {
-    const candidates = yield searchDomain(domain, targets);
+    const candidates = yield searchDomain(domain, targets, info && info.year);
     for (const candidate of candidates.slice(0, 3)) {
       const pageUrl = yield pageForTarget(candidate, domain, type, season || 1, episode || 1);
       if (!pageUrl) continue;
