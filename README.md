@@ -17,9 +17,9 @@ Provider'lar üçüncü taraf sitelerin güncel HTML ve oynatıcı yapılarına 
 
 ## Güncel sürüm
 
-Manifest: 2.12.1
+Manifest: 2.12.2
 
-Provider bundle'ları manifest tarafından doğrudan yüklenir. Yeni değişikliklerde ilgili provider sürümü ve manifest filename alanı birlikte güncellenmelidir.
+Provider bundle'ları manifest tarafından doğrudan yüklenir. Yeni değişikliklerde ilgili provider sürümü ve manifest filename alanı birlikte güncellenmelidir. Bleach: Thousand-Year Blood War, normal Bleach'in 16 sezonuna eklenmez; ayrı TMDB içeriği olarak eşleştirilir.
 
 ## Çalışma koşulları
 

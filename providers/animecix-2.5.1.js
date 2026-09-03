@@ -28,7 +28,7 @@ var ANIMECIX = "https://animecix.tv";
 var TAU_VIDEO = "https://tau-video.xyz";
 var TMDB = "https://api.themoviedb.org/3";
 var EPISODE_MAPPING = "https://id-mapping-api-malid.hf.space/api/resolve";
-var PROVIDER_VERSION = "2.5.0";
+var PROVIDER_VERSION = "2.5.1";
 var TAU_STREAM_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   Referer: TAU_VIDEO + "/",
@@ -247,11 +247,8 @@ function isBleachTybw(tmdbId, info) {
   var text = normalize(info && info.title) + normalize(info && info.original);
   return text.indexOf("thousandyearbloodwar") !== -1 || text.indexOf("sennenkessenhen") !== -1 || text.indexOf("sennenkessen") !== -1;
 }
-function isBleachTybwRequest(tmdbId, info, season) {
-  if (isBleachTybw(tmdbId, info))
-    return true;
-  var s = parseInt(season, 10) || 1;
-  return isBleach(tmdbId, info) && s > 1;
+function isBleachTybwRequest(tmdbId, info) {
+  return isBleachTybw(tmdbId, info);
 }
 function getSeasonCounts(info) {
   var seasons = info && Array.isArray(info.seasons) ? info.seasons : [];
@@ -296,7 +293,7 @@ function getBleachAbsoluteEpisode(season, episode) {
 function getSourceEpisode(tmdbId, info, season, episode, mapped) {
   var s = parseInt(season, 10) || 1;
   var e = parseInt(episode, 10) || 1;
-  if (isBleachTybwRequest(tmdbId, info, s)) {
+  if (isBleachTybwRequest(tmdbId, info)) {
     // Animecix stores TYBW as its own second season; the episode number is direct.
     return { season: 2, episode: e };
   }
@@ -306,10 +303,6 @@ function getSourceEpisode(tmdbId, info, season, episode, mapped) {
       if (absolute)
         return { season: 1, episode: absolute };
     }
-    if (s === 17)
-      return { season: 2, episode: e };
-    if (s === 2 && e > BLEACH_SEASON_COUNTS[1])
-      return { season: 2, episode: e };
   }
   return { season: s, episode: e };
 }
@@ -453,7 +446,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
       }
       var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
       var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
-      var bleachTybw = isBleachTybwRequest(tmdbId, info, s);
+      var bleachTybw = isBleachTybwRequest(tmdbId, info);
       var lookup = yield Promise.all([
         findAnime(tmdbId, info.title, info.original, bleachTybw),
         mediaType === "movie" || bleachTybw ? Promise.resolve(null) : getEpisodeMapping(info.imdbId, s, e)

@@ -9,7 +9,7 @@
 var BASE_URL = "https://animexe.com";
 var TMDB_URL = "https://api.themoviedb.org/3";
 var REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
-var PROVIDER_VERSION = "1.0.3";
+var PROVIDER_VERSION = "1.0.4";
 var DEFAULT_TMDB_API_KEY = "";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 var PAGE_HEADERS = {
@@ -307,7 +307,7 @@ function candidateNames(row) {
 
 function findCandidates(info, mediaType, season, domain) {
   var targets = [];
-  var preferTybw = isBleachTybwRequest(info, mediaType, season);
+  var preferTybw = isBleachTybwRequest(info, mediaType);
   var rawTargets = preferTybw ? ["Bleach: Thousand-Year Blood War", info.turkishTitle, info.title, info.originalTitle] : [info.turkishTitle, info.title, info.originalTitle];
   for (var i = 0; i < rawTargets.length; i++) {
     var value = String(rawTargets[i] || "").trim();
@@ -389,13 +389,10 @@ function isBleachTybw(info) {
   return text.indexOf("bleach") !== -1 && (text.indexOf("thousandyearbloodwar") !== -1 || text.indexOf("sennenkessen") !== -1);
 }
 
-function isBleachTybwRequest(info, mediaType, season) {
+function isBleachTybwRequest(info, mediaType) {
   if (mediaType === "movie")
     return false;
-  if (isBleachTybw(info))
-    return true;
-  var s = parseInt(season, 10) || 1;
-  return isBleachMain(info) && s > 1;
+  return isBleachTybw(info);
 }
 
 function bleachAbsoluteEpisode(season, episode) {
@@ -417,7 +414,7 @@ function episodeUrlVariants(candidate, info, mediaType, season, episode, domain)
   var e = parseInt(episode, 10) || 1;
   var site = String(domain || BASE_URL).replace(/\/+$/, "");
   var urls = [];
-  var tybwRequest = isBleachTybwRequest(info, mediaType, s);
+  var tybwRequest = isBleachTybwRequest(info, mediaType);
   var normalizedSlug = normalizeTitle(value);
   if (tybwRequest && isBleachMain(info) && normalizedSlug.indexOf("bleachthousandyearbloodwar") === -1)
     return [];

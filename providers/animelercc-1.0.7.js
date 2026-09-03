@@ -26,7 +26,7 @@ var __async = (__this, __arguments, generator) => {
 // src/animelercc/index.js
 var BASE_URL = "https://animeler.cc";
 var TMDB = "https://api.themoviedb.org/3";
-var PROVIDER_VERSION = "1.0.6";
+var PROVIDER_VERSION = "1.0.7";
 var DEFAULT_TMDB_API_KEY = "";
 var REQUEST_TIMEOUT_MS = 8e3;
 var RESOLVE_TIMEOUT_MS = 20e3;
@@ -179,11 +179,8 @@ function isBleachTybw(info) {
   return text.indexOf("bleach") !== -1 && (text.indexOf("thousandyearbloodwar") !== -1 || text.indexOf("sennenkessen") !== -1);
 }
 
-function isBleachTybwRequest(info, season) {
-  if (isBleachTybw(info))
-    return true;
-  var s = parseInt(season, 10) || 1;
-  return isBleachMain(info) && s > 1;
+function isBleachTybwRequest(info) {
+  return isBleachTybw(info);
 }
 function uniqueValues(values) {
   var output = [];
@@ -537,7 +534,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
       }
       var s = mediaType === "movie" ? 1 : parseInt(season, 10) || 1;
       var e = mediaType === "movie" ? 1 : parseInt(episode, 10) || 1;
-      var useBleachTybwPage = mediaType !== "movie" && isBleachTybwRequest(info, s);
+      var useBleachTybwPage = mediaType !== "movie" && isBleachTybwRequest(info);
       var anime = yield findAnime(info.title, info.original, useBleachTybwPage);
       if (!anime) {
         console.log("[Animeler.cc] ba\u015Fl\u0131k e\u015Fle\u015Fmesi yok: " + info.title);
