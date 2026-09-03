@@ -71,7 +71,7 @@ for (const entry of Object.values(domainRegistry.providers || {})) {
 }
 
 assert.match(read("providers/hdfilmcehennemi-1.0.6.js"), /SEARCH_TIMEOUT_MS = 5e3/);
-assert.match(read("providers/hdfilmcehennemi-1.0.5.js"), /firstSuccessful\(tasks\)/);
+assert.match(read("providers/hdfilmcehennemi-1.0.6.js"), /firstSuccessful\(tasks\)/);
 assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /AD_MEDIA_URL_RE/);
 assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /fullHdProbeMediaUrl/);
 assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /TMDB API Anahtarı \(gerekli\)/);
