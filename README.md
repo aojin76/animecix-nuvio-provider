@@ -17,13 +17,13 @@ Provider'lar üçüncü taraf sitelerin güncel HTML ve oynatıcı yapılarına 
 
 ## Güncel sürüm
 
-Manifest: 2.12.2
+Manifest: 2.12.3
 
-Provider bundle'ları manifest tarafından doğrudan yüklenir. Yeni değişikliklerde ilgili provider sürümü ve manifest filename alanı birlikte güncellenmelidir. Bleach: Thousand-Year Blood War, normal Bleach'in 16 sezonuna eklenmez; ayrı TMDB içeriği olarak eşleştirilir.
+Provider bundle'ları manifest tarafından doğrudan yüklenir. Yeni değişikliklerde ilgili provider sürümü ve manifest filename alanı birlikte güncellenmelidir. Bleach: Thousand-Year Blood War, normal Bleach'in 16 sezonuna eklenmez; ayrı TMDB içeriği olarak eşleştirilir. Animexe sezon yolları, Animeler.cc ise tekil bölüm numarası kullanır.
 
 ## Çalışma koşulları
 
-- Provider ayarlarında TMDB v3 API Key veya v4 Read Access Token kullanılmalıdır.
+- Genel içerik eşleştirmesi için TMDB v3 API Key veya v4 Read Access Token girilmelidir; bilinen Bleach TYBW kimliklerinde anahtarsız yerleşik eşleştirme kullanılır.
 - GitHub Actions ve yerel doğrulama Node.js 24 hedefler.
 - CI; manifest, dosya, sözdizimi ve güvenlik sözleşmelerini kontrol eder. Üçüncü taraf siteler Cloudflare/IP kısıtları nedeniyle CI'da canlı oynatma testi olarak kullanılmaz.
 - `domains.json` otomatik yenilemesi doğrulanmış değişiklikler için PR açar; ana dala doğrudan yazmaz.

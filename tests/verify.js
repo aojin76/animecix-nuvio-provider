@@ -10,7 +10,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const manifest = JSON.parse(read("manifest.json"));
 const packageJson = JSON.parse(read("package.json"));
 
-assert.equal(manifest.version, "2.12.2");
+assert.equal(manifest.version, "2.12.3");
 assert.equal(packageJson.version, manifest.version);
 assert.equal(packageJson.engines && packageJson.engines.node, ">=24");
 assert.ok(Array.isArray(manifest.scrapers) && manifest.scrapers.length > 0);
@@ -79,8 +79,8 @@ assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /decisions\[index\]
 assert.match(read("providers/dizibox-1.0.5.js"), /PROVIDER_VERSION = "1.0.5"/);
 assert.match(read("providers/dizibox-1.0.5.js"), /reklam\|reklamlar/);
 assert.match(read("providers/dizibox-1.0.5.js"), /keep: decision === true/);
-assert.match(read("providers/animelercc-1.0.7.js"), /playerTypeForUrl/);
-assert.ok(read("providers/animelercc-1.0.7.js").includes("application/vnd.apple.mpegurl"));
+assert.match(read("providers/animelercc-1.0.8.js"), /playerTypeForUrl/);
+assert.ok(read("providers/animelercc-1.0.8.js").includes("application/vnd.apple.mpegurl"));
 assert.ok(manifest.scrapers.find((scraper) => scraper.id === "animelercc").formats.includes("m3u8"));
 assert.match(read("providers/filmmakinesi-1.0.0.js"), /SITE_ID = "filmmakinesi"/);
 assert.match(read("providers/filmmakinesi-1.0.0.js"), /decisions\[i\] !== true/);
@@ -89,9 +89,9 @@ assert.match(read("providers/720izle-1.0.0.js"), /hlsLooksLikeLongMedia/);
 assert.match(read("providers/720izle-1.0.0.js"), /decisions\[i\] !== true/);
 
 
-const animecixSource = read("providers/animecix-2.5.1.js");
-const animexeSource = read("providers/animexe-1.0.4.js");
-const animelerccSource = read("providers/animelercc-1.0.7.js");
+const animecixSource = read("providers/animecix-2.5.2.js");
+const animexeSource = read("providers/animexe-1.0.5.js");
+const animelerccSource = read("providers/animelercc-1.0.8.js");
 assert.match(animecixSource, /return isBleachTybw\(tmdbId, info\);/);
 assert.doesNotMatch(animecixSource, /return isBleach\(tmdbId, info\) && s > 1/);
 assert.doesNotMatch(animecixSource, /if \(s === 17\)/);
@@ -100,8 +100,132 @@ assert.match(animexeSource, /return isBleachTybw\(info\);/);
 assert.doesNotMatch(animexeSource, /return isBleachMain\(info\) && s > 1/);
 assert.match(animelerccSource, /return isBleachTybw\(info\);/);
 assert.doesNotMatch(animelerccSource, /return isBleachMain\(info\) && s > 1/);
+assert.match(animecixSource, /BLEACH_TYBW_TMDB_IDS[\s\S]{0,100}14986406/);
+assert.match(animexeSource, /BLEACH_TYBW_TMDB_IDS[\s\S]{0,100}14986406/);
+assert.match(animelerccSource, /LEGACY_TYBW_TMDB_IDS[\s\S]{0,100}14986406/);
+assert.doesNotMatch(animecixSource, /439c478a771f35c05022f9feabcca01c/);
+assert.doesNotMatch(animexeSource, /439c478a771f35c05022f9feabcca01c/);
+assert.doesNotMatch(animelerccSource, /439c478a771f35c05022f9feabcca01c/);
+assert.match(animexeSource, /else if \(tybwRequest\)[\s\S]{0,500}add\(s, e\);/, "Animexe TYBW must use source season");
+assert.doesNotMatch(animexeSource, /else if \(tybwRequest\)[\s\S]{0,160}add\(1, e\);/, "Animexe TYBW must not flatten every season to S1");
+assert.match(animelerccSource, /canonicalTybwEpisodes/);
+assert.match(animelerccSource, /if \(forceDirect\) \{[\s\S]{0,180}if \(absolute\)/, "Animeler.cc TYBW must prefer absolute episode mapping");
 
 
+
+const fixtureResponse = (body, options = {}) => {
+  const status = options.status || 200;
+  const isText = typeof body === "string";
+  return {
+    ok: status >= 200 && status < 400,
+    status,
+    text: async () => isText ? body : JSON.stringify(body),
+    json: async () => isText ? JSON.parse(body) : body
+  };
+};
+
+async function runProviderFixture(filename, fixtureFetch, args) {
+  const sandbox = {
+    module: { exports: {} },
+    exports: {},
+    console: { log() {}, error() {} },
+    fetch: fixtureFetch,
+    SCRAPER_SETTINGS: {},
+    setTimeout,
+    clearTimeout,
+    AbortSignal,
+    URL,
+    URLSearchParams,
+    Promise,
+    Date,
+    Math,
+    String,
+    Number,
+    Object,
+    Array,
+    Set,
+    Map,
+    RegExp,
+    encodeURIComponent,
+    decodeURIComponent
+  };
+  sandbox.globalThis = sandbox;
+  vm.runInNewContext(read(filename), sandbox, { filename });
+  return sandbox.module.exports.getStreams(...args);
+}
+
+async function runAnimeTybwFixture() {
+  const tmdbUrlPrefix = "https://api.themoviedb.org/3/tv/";
+  const tmdbBody = {
+    name: "Bleach: Thousand-Year Blood War",
+    original_name: "Bleach: Sennen Kessen-hen",
+    first_air_date: "2022-10-11",
+    seasons: [
+      { season_number: 1, episode_count: 13 },
+      { season_number: 2, episode_count: 13 },
+      { season_number: 3, episode_count: 14 },
+      { season_number: 4, episode_count: 6 }
+    ]
+  };
+
+  const animecixFetch = async (request) => {
+    const url = String(request);
+    if (url.startsWith(tmdbUrlPrefix))
+      return fixtureResponse("", { status: 404 });
+    if (url.startsWith("https://animecix.tv/secure/search/"))
+      return fixtureResponse({ results: [{ id: 82, name: "Bleach", tmdb_id: "30984" }] });
+    if (url === "https://animecix.tv/secure/episode-videos?titleId=82&episode=1&season=2")
+      return fixtureResponse([{ url: "https://tau-video.xyz/embed/abc" }]);
+    if (url === "https://tau-video.xyz/api/video/abc")
+      return fixtureResponse({ urls: [{ url: "https://media.fixture.test/bleach.m3u8", label: "1080p", size: 1000000 }] });
+    return fixtureResponse("", { status: 404 });
+  };
+
+  const animexeUrl = "https://animexe.com/stream/proxy?u=fixture";
+  const animexeFetch = async (request) => {
+    const url = String(request);
+    if (url.startsWith(tmdbUrlPrefix))
+      return fixtureResponse("", { status: 404 });
+    if (url.includes("raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json"))
+      return fixtureResponse({ providers: { animexe: { domains: ["https://animexe.com"] } } });
+    if (url.startsWith("https://animexe.com/search/suggest"))
+      return fixtureResponse({ results: [] });
+    if (url === "https://animexe.com/watch/bleach-thousand-year-blood-war-7443/2/1") {
+      const html = "const VIDEO_SOURCES = [{\"url\":\"" + animexeUrl + "\",\"type\":\"hls\",\"quality\":\"1080p\"}]; const M3U8 = \"" + animexeUrl + "\"; const MP4 = null;";
+      return fixtureResponse(html);
+    }
+    return fixtureResponse("", { status: 404 });
+  };
+
+  const animelerUrl = "https://animeler.cc/vstream/oynatici?u=fixture";
+  const animelerFetch = async (request) => {
+    const url = String(request);
+    if (url.startsWith(tmdbUrlPrefix))
+      return fixtureResponse("", { status: 404 });
+    if (url.startsWith("https://animeler.cc/animeler?q="))
+      return fixtureResponse("");
+    if (url === "https://animeler.cc/anime/bleach-thousand-year-blood-war")
+      return fixtureResponse("<html></html>");
+    if (url === "https://animeler.cc/izle/bleach-thousand-year-blood-war/14-bolum") {
+      const html = "<script>fetch(\"https://animeler.cc/api-oynatici-coz?embed=\" + encodeURIComponent(\"https://tau-video.xyz/embed/fixture\") + \"&ozel=0\")</script>";
+      return fixtureResponse(html);
+    }
+    if (url.startsWith("https://animeler.cc/api-oynatici-coz?"))
+      return fixtureResponse({ url: animelerUrl });
+    return fixtureResponse("", { status: 404 });
+  };
+
+  const [animecixStreams, animexeStreams, animelerStreams] = await Promise.all([
+    runProviderFixture("providers/animecix-2.5.2.js", animecixFetch, ["214779", "tv", 1, 1]),
+    runProviderFixture("providers/animexe-1.0.5.js", animexeFetch, ["214779", "tv", 2, 1]),
+    runProviderFixture("providers/animelercc-1.0.8.js", animelerFetch, ["214779", "tv", 2, 1])
+  ]);
+  assert.equal(animecixStreams.length, 1, "Animecix TYBW fallback fixture should resolve");
+  assert.equal(animexeStreams.length, 1, "Animexe TYBW season fixture should resolve");
+  assert.equal(animelerStreams.length, 1, "Animeler.cc TYBW absolute fixture should resolve");
+  assert.equal(animexeStreams[0].url, animexeUrl);
+  assert.equal(animelerStreams[0].url, animelerUrl);
+}
 
 async function runHdfilmMortalKombatFixture() {
   const mediaUrl = "https://media.fixture.test/mortal-kombat-ii.mp4";
@@ -188,7 +312,7 @@ async function runHdfilmMortalKombatFixture() {
   assert.equal(streams[0].url, mediaUrl);
 }
 
-runHdfilmMortalKombatFixture().then(() => {
+Promise.all([runHdfilmMortalKombatFixture(), runAnimeTybwFixture()]).then(() => {
   console.log("provider verification passed: " + manifest.scrapers.length + " scrapers");
 }).catch((error) => {
   console.error(error);

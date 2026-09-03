@@ -1,18 +1,18 @@
 {
   "name": "Animecix Nuvio",
-  "version": "2.12.2",
+  "version": "2.12.3",
   "scrapers": [
     {
       "id": "animecix",
       "name": "Animecix",
       "description": "Animecix.tv için güncel Türkçe anime video sağlayıcısı",
-      "version": "2.5.1",
+      "version": "2.5.2",
       "author": "aojin76",
       "supportedTypes": [
         "movie",
         "tv"
       ],
-      "filename": "providers/animecix-2.5.1.js",
+      "filename": "providers/animecix-2.5.2.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://animecix.tv/favicon.ico",
@@ -31,12 +31,12 @@
       "id": "animexe",
       "name": "Animexe",
       "description": "Animexe.com için Türkçe anime video sağlayıcısı",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "author": "aojin76",
       "supportedTypes": [
         "tv"
       ],
-      "filename": "providers/animexe-1.0.4.js",
+      "filename": "providers/animexe-1.0.5.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://animexe.com/favicon.png",
@@ -55,12 +55,12 @@
       "id": "animelercc",
       "name": "Animeler.cc",
       "description": "Animeler.cc için Türkçe anime video sağlayıcısı",
-      "version": "1.0.7",
+      "version": "1.0.8",
       "author": "aojin76",
       "supportedTypes": [
         "tv"
       ],
-      "filename": "providers/animelercc-1.0.7.js",
+      "filename": "providers/animelercc-1.0.8.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://animeler.cc/favicon.ico",

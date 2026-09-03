@@ -26,7 +26,7 @@ var __async = (__this, __arguments, generator) => {
 // src/animelercc/index.js
 var BASE_URL = "https://animeler.cc";
 var TMDB = "https://api.themoviedb.org/3";
-var PROVIDER_VERSION = "1.0.7";
+var PROVIDER_VERSION = "1.0.8";
 var DEFAULT_TMDB_API_KEY = "";
 var REQUEST_TIMEOUT_MS = 8e3;
 var RESOLVE_TIMEOUT_MS = 20e3;
@@ -36,7 +36,7 @@ var PAGE_HEADERS = {
   "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
   "User-Agent": USER_AGENT
 };
-var LEGACY_TYBW_TMDB_IDS = ["212624", "214779"];
+var LEGACY_TYBW_TMDB_IDS = ["212624", "214779", "14986406", "tt14986406"];
 var TYBW_SEASON_COUNTS = [13, 13, 14, 6];
 function getTmdbKeys() {
   var keys = [];
@@ -58,7 +58,7 @@ function getTmdbKeys() {
     }
   } catch (_) {
   }
-  if (!keys.length)
+  if (!keys.length && DEFAULT_TMDB_API_KEY)
     keys.push(DEFAULT_TMDB_API_KEY);
   var unique = [];
   for (var i = 0; i < keys.length; i++) {
@@ -221,7 +221,8 @@ function getTmdbInfo(tmdbId, mediaType) {
           return {
             title: String(title),
             original: String(original),
-            seasons: Array.isArray(data.seasons) ? data.seasons : []
+            seasons: Array.isArray(data.seasons) ? data.seasons : [],
+            tmdbId: String(tmdbId)
           };
         }
       } catch (_) {
@@ -235,7 +236,8 @@ function getTmdbInfo(tmdbId, mediaType) {
       return {
         title: "Bleach: Thousand-Year Blood War",
         original: "Bleach: Sennen Kessen-hen",
-        seasons: legacySeasons
+        seasons: legacySeasons,
+        tmdbId: String(tmdbId)
       };
     }
     return null;
@@ -332,8 +334,19 @@ function findAnime(title, original, preferTybw) {
       if (bestScore === 100)
         return best;
     }
+    if (preferTybw)
+      return { slug: "bleach-thousand-year-blood-war", name: "Bleach: Thousand-Year Blood War" };
     return best;
   });
+}
+function isCanonicalTybwAnime(anime) {
+  return !!(anime && normalize(anime.slug).indexOf("bleachthousandyearbloodwar") !== -1);
+}
+function canonicalTybwEpisodes() {
+  var episodes = {};
+  for (var i = 1; i <= 46; i++)
+    episodes[i] = BASE_URL + "/izle/bleach-thousand-year-blood-war/" + String(i) + "-bolum";
+  return episodes;
 }
 function getEpisodes(anime) {
   return __async(this, null, function* () {
@@ -345,18 +358,21 @@ function getEpisodes(anime) {
       var episodes = {};
       var linkPattern = /<a\b[^>]*href\s*=\s*["']([^"']*\/izle\/[^"']+\/([0-9]+)-bolum[^"']*)["'][^>]*>/gi;
       var match;
-      while (match = linkPattern.exec(String(html || ""))) {
+      while ((match = linkPattern.exec(String(html || ""))) !== null) {
         var number = parseInt(match[2], 10);
         if (!number || episodes[number])
           continue;
         episodes[number] = makeAbsoluteUrl(match[1]);
       }
+      if (maxEpisode(episodes) < 1 && isCanonicalTybwAnime(anime))
+        return canonicalTybwEpisodes();
       return episodes;
     } catch (_) {
-      return {};
+      return isCanonicalTybwAnime(anime) ? canonicalTybwEpisodes() : {};
     }
   });
 }
+
 function maxEpisode(episodes) {
   var max = 0;
   for (var key in episodes) {
@@ -388,7 +404,7 @@ function getAbsoluteEpisode(info, season, episode) {
   var e = parseInt(episode, 10) || 1;
   if (s <= 1)
     return e;
-  var counts = getSeasonCounts(info);
+  var counts = getSeasonCounts(info) || (isBleachTybwRequest(info) ? TYBW_SEASON_COUNTS : null);
   if (!counts || !counts[s - 1])
     return null;
   var offset = 0;
@@ -406,13 +422,16 @@ function chooseEpisode(episodes, info, season, episode, forceDirect) {
   var direct = episodes[e] || null;
   var absoluteNumber = getAbsoluteEpisode(info, s, e);
   var absolute = absoluteNumber ? episodes[absoluteNumber] || null : null;
-  var counts = getSeasonCounts(info);
+  var counts = getSeasonCounts(info) || (isBleachTybwRequest(info) ? TYBW_SEASON_COUNTS : null);
   var currentCount = counts && counts[s - 1] ? counts[s - 1] : 0;
-  if (forceDirect && direct)
-    return { number: e, url: direct };
-  if (s > 1 && absolute && absoluteNumber !== e && available > currentCount) {
-    return { number: absoluteNumber, url: absolute };
+  if (forceDirect) {
+    if (absolute)
+      return { number: absoluteNumber, url: absolute };
+    if (direct)
+      return { number: e, url: direct };
   }
+  if (s > 1 && absolute && absoluteNumber !== e && available > currentCount)
+    return { number: absoluteNumber, url: absolute };
   if (direct)
     return { number: e, url: direct };
   if (absolute)
@@ -433,7 +452,21 @@ function playerTypeForUrl(value) {
     return "m3u8";
   return "mp4";
 }
-function getPlayerUrl(html) {
+function normalizePlayerUrl(value, baseUrl) {
+  var raw = decodeHtml(String(value || "").trim()).replace(/\\\//g, "/");
+  if (!raw)
+    return "";
+  var url = raw;
+  if (/^\/\//.test(raw)) {
+    var schemeMatch = /^(https?):/i.exec(String(baseUrl || BASE_URL));
+    url = (schemeMatch ? schemeMatch[1] : "https") + ":" + raw;
+  } else if (raw.charAt(0) === "/") {
+    var originMatch = /^https?:\/\/[^/]+/i.exec(String(baseUrl || BASE_URL));
+    url = (originMatch ? originMatch[0] : BASE_URL) + raw;
+  }
+  return isPlayablePlayerUrl(url) ? url : "";
+}
+function getPlayerUrl(html, baseUrl) {
   var source = String(html || "");
   var patterns = [
     /\b(?:var|let|const)\s+src\s*=\s*["']([^"']+)["']/gi,
@@ -443,8 +476,8 @@ function getPlayerUrl(html) {
   for (var i = 0; i < patterns.length; i++) {
     var match;
     while ((match = patterns[i].exec(source)) !== null) {
-      var url = decodeHtml(match[1]);
-      if (isPlayablePlayerUrl(url))
+      var url = normalizePlayerUrl(match[1], baseUrl);
+      if (url)
         return url;
     }
   }
@@ -496,7 +529,7 @@ function resolvePlayer(episodeUrl) {
         Referer: BASE_URL + "/",
         "User-Agent": USER_AGENT
       });
-      var direct = getPlayerUrl(html);
+      var direct = getPlayerUrl(html, episodeUrl);
       if (direct)
         return direct;
       var sources = getEmbeddedSources(html);
@@ -508,10 +541,11 @@ function resolvePlayer(episodeUrl) {
             Origin: BASE_URL
           });
           var directResolved = resolved && (resolved.url || resolved.src || resolved.stream || resolved.video);
-          if (directResolved && isPlayablePlayerUrl(directResolved))
-            return String(directResolved);
+          var playableResolved = normalizePlayerUrl(directResolved, episodeUrl);
+          if (playableResolved)
+            return playableResolved;
           var resolvedHtml = resolved && (resolved.html || resolved.data || resolved.content);
-          var player = getPlayerUrl(resolvedHtml || "");
+          var player = getPlayerUrl(resolvedHtml || "", episodeUrl);
           if (player)
             return player;
         } catch (_) {
@@ -575,12 +609,12 @@ function getStreams(tmdbId, mediaType, season, episode) {
 function onSettings() {
   return __async(this, null, function* () {
     return [
-      { type: "header", label: "TMDB API Anahtar\u0131 (gerekli)" },
+      { type: "header", label: "TMDB API Anahtar\u0131 (genel içerik için)" },
       {
         type: "text",
         key: "tmdbApiKey",
         label: "TMDB API Key veya Read Access Token",
-        description: "Kendi TMDB v3 API Key'ini veya v4 Read Access Token'\u0131n\u0131 gir. Anahtar koda kaydedilmez.",
+        description: "Genel içerik eşleştirmesi için TMDB v3 API Key veya v4 Read Access Token'\u0131 gir; bilinen Bleach TYBW kimliklerinde boş bırakılabilir.",
         defaultValue: ""
       }
     ];
