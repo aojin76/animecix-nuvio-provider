@@ -6,10 +6,27 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
-const manifestPath = path.join(root, "manifest.json");
-const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-assert.equal(manifest.version, "2.11.0");
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const manifest = JSON.parse(read("manifest.json"));
+const packageJson = JSON.parse(read("package.json"));
+
+assert.equal(manifest.version, "2.12.0");
+assert.equal(packageJson.version, manifest.version);
+assert.equal(packageJson.engines && packageJson.engines.node, ">=24");
 assert.ok(Array.isArray(manifest.scrapers) && manifest.scrapers.length > 0);
+
+const providerWorkflow = read(".github/workflows/provider-check.yml");
+const domainWorkflow = read(".github/workflows/domain-refresh.yml");
+for (const [name, workflow] of [["provider-check.yml", providerWorkflow], ["domain-refresh.yml", domainWorkflow]]) {
+  assert.match(workflow, /actions\/checkout@v5/, name + " must use checkout v5");
+  assert.match(workflow, /actions\/setup-node@v5/, name + " must use setup-node v5");
+  assert.match(workflow, /node-version:\s*["']24["']/, name + " must use Node 24");
+  assert.doesNotMatch(workflow, /node-version:\s*["']20["']/, name + " still targets Node 20");
+}
+assert.match(domainWorkflow, /run: node scripts\/refresh-domains\.js/);
+assert.match(domainWorkflow, /run: npm test/, "domain refresh must test before publishing");
+assert.match(domainWorkflow, /gh pr create/, "domain refresh must publish through a PR");
+assert.doesNotMatch(domainWorkflow, /git push origin HEAD:main/, "domain refresh must not push directly to main");
 
 const manifestFiles = new Set();
 const ids = new Set();
@@ -18,6 +35,10 @@ for (const scraper of manifest.scrapers) {
   assert.ok(scraper.id && !ids.has(scraper.id), "duplicate scraper id: " + scraper.id);
   ids.add(scraper.id);
   assert.match(scraper.filename, /^providers\/[A-Za-z0-9._-]+\.js$/);
+  const filenameVersion = scraper.filename.match(/-(\d+\.\d+\.\d+)\.js$/);
+  assert.ok(filenameVersion, "provider filename has no semantic version: " + scraper.filename);
+  assert.equal(filenameVersion[1], scraper.version, "manifest/file version mismatch: " + scraper.id);
+
   const resolvedPath = path.resolve(root, scraper.filename);
   assert.ok(!path.relative(root, resolvedPath).startsWith(".."), "path escapes repository");
   manifestFiles.add(path.basename(scraper.filename));
@@ -27,30 +48,44 @@ for (const scraper of manifest.scrapers) {
   new vm.Script(source, { filename: scraper.filename });
   assert.match(source, /module\.exports/);
   assert.match(source, /getStreams/);
+  if (scraper.hasSettings)
+    assert.match(source, /onSettings/);
+  if (/application\/vnd\.apple\.mpegurl|\.m3u8/.test(source))
+    assert.ok(scraper.formats.includes("m3u8"), "provider emits HLS but manifest omits m3u8: " + scraper.id);
 }
 
 const providerDir = path.join(root, "providers");
-for (const file of fs.readdirSync(providerDir).filter((value) => value.endsWith(".js"))) {
+for (const file of fs.readdirSync(providerDir).filter((value) => value.endsWith(".js")))
   assert.ok(manifestFiles.has(file), "orphan provider bundle: " + file);
+
+for (const file of fs.readdirSync(root))
+  assert.doesNotMatch(file, /^manifest-\d+\.\d+\.\d+\.json$/, "obsolete snapshot manifest remains: " + file);
+
+const domainRegistry = JSON.parse(read("domains.json"));
+const registryIds = Object.keys(domainRegistry.providers || {}).sort();
+const manifestIds = manifest.scrapers.map((scraper) => scraper.id).sort();
+assert.deepEqual(registryIds, manifestIds, "domain registry and manifest provider IDs differ");
+for (const entry of Object.values(domainRegistry.providers || {})) {
+  assert.ok(Array.isArray(entry.domains) && entry.domains.length > 0);
+  assert.ok(entry.allowedHost);
 }
 
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 assert.match(read("providers/hdfilmcehennemi-1.0.5.js"), /SEARCH_TIMEOUT_MS = 5e3/);
 assert.match(read("providers/hdfilmcehennemi-1.0.5.js"), /firstSuccessful\(tasks\)/);
 assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /AD_MEDIA_URL_RE/);
 assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /fullHdProbeMediaUrl/);
+assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /TMDB API Anahtarı \(gerekli\)/);
+assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /decisions\[index\] !== true/);
+assert.match(read("providers/dizibox-1.0.5.js"), /PROVIDER_VERSION = "1.0.5"/);
 assert.match(read("providers/dizibox-1.0.5.js"), /reklam\|reklamlar/);
+assert.match(read("providers/dizibox-1.0.5.js"), /keep: decision === true/);
 assert.match(read("providers/animelercc-1.0.6.js"), /playerTypeForUrl/);
 assert.ok(read("providers/animelercc-1.0.6.js").includes("application/vnd.apple.mpegurl"));
-
+assert.ok(manifest.scrapers.find((scraper) => scraper.id === "animelercc").formats.includes("m3u8"));
 assert.match(read("providers/filmmakinesi-1.0.0.js"), /SITE_ID = "filmmakinesi"/);
+assert.match(read("providers/filmmakinesi-1.0.0.js"), /decisions\[i\] !== true/);
 assert.match(read("providers/720izle-1.0.0.js"), /hotAesDecrypt/);
 assert.match(read("providers/720izle-1.0.0.js"), /hlsLooksLikeLongMedia/);
-const domainRegistry = JSON.parse(read("domains.json"));
-for (const id of ["filmmakinesi", "720izle"]) {
-  assert.ok(domainRegistry.providers[id], "missing domain registry entry: " + id);
-  assert.ok(Array.isArray(domainRegistry.providers[id].domains) && domainRegistry.providers[id].domains.length > 0);
-  assert.ok(domainRegistry.providers[id].allowedHost);
-}
+assert.match(read("providers/720izle-1.0.0.js"), /decisions\[i\] !== true/);
 
 console.log("provider verification passed: " + manifest.scrapers.length + " scrapers");

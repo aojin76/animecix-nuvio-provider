@@ -1,9 +1,12 @@
 {
   "name": "animecix-nuvio-provider",
-  "version": "2.11.0",
+  "version": "2.12.0",
   "private": true,
   "description": "Animecix Nuvio provider manifesti ve generated provider bundle'ları",
   "scripts": {
     "test": "node tests/verify.js"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

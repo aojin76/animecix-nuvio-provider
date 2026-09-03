@@ -17,6 +17,14 @@ Provider'lar üçüncü taraf sitelerin güncel HTML ve oynatıcı yapılarına 
 
 ## Güncel sürüm
 
-Manifest: 2.11.0
+Manifest: 2.12.0
 
 Provider bundle'ları manifest tarafından doğrudan yüklenir. Yeni değişikliklerde ilgili provider sürümü ve manifest filename alanı birlikte güncellenmelidir.
+
+## Çalışma koşulları
+
+- Provider ayarlarında TMDB v3 API Key veya v4 Read Access Token kullanılmalıdır.
+- GitHub Actions ve yerel doğrulama Node.js 24 hedefler.
+- CI; manifest, dosya, sözdizimi ve güvenlik sözleşmelerini kontrol eder. Üçüncü taraf siteler Cloudflare/IP kısıtları nedeniyle CI'da canlı oynatma testi olarak kullanılmaz.
+- `domains.json` otomatik yenilemesi doğrulanmış değişiklikler için PR açar; ana dala doğrudan yazmaz.
+- Provider'lar `domains.json` dosyasını raw GitHub üzerinden okuduğu için bu repo public kalmalıdır.

@@ -1,6 +1,6 @@
 {
   "name": "Animecix Nuvio",
-  "version": "2.11.0",
+  "version": "2.12.0",
   "scrapers": [
     {
       "id": "animecix",
@@ -68,7 +68,8 @@
         "tr"
       ],
       "formats": [
-        "mp4"
+        "mp4",
+        "m3u8"
       ],
       "limited": false,
       "disabledPlatforms": [],
