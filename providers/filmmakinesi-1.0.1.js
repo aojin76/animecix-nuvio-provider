@@ -1,5 +1,5 @@
 /**
- * 720izle-1.0.0 - Built from src/720izle/
+ * filmmakinesi-1.0.1 - Built from src/filmmakinesi/
  * Generated: 2026-09-02T20:30:00.000Z
  */
 var __defProp = Object.defineProperty;
@@ -145,27 +145,32 @@ var DEFAULT_TMDB_API_KEY = "";
 function getTmdbApiKey() {
   try {
     const settings = typeof globalThis !== "undefined" ? globalThis.SCRAPER_SETTINGS : null;
-    const userKey = (settings == null ? void 0 : settings.tmdbApiKey) ? String(settings.tmdbApiKey).trim() : "";
+    const userKey = settings && (settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey ||
+      settings.TMDB_API_KEY || settings.tmdbAccessToken || settings.tmdb_access_token || settings.tmdbToken);
     if (userKey)
-      return userKey;
+      return String(userKey).trim();
   } catch (e) {
   }
   try {
-    const injected = typeof globalThis !== "undefined" ? globalThis.TMDB_API_KEY : "";
+    const injected = typeof globalThis !== "undefined" ? (globalThis.TMDB_API_KEY || globalThis.TMDB_ACCESS_TOKEN ||
+      globalThis.TMDB_API_ACCESS_TOKEN || globalThis.__TMDB_API_KEY) : "";
     if (injected)
       return String(injected).trim();
   } catch (e) {
   }
   return DEFAULT_TMDB_API_KEY;
 }
+function isTmdbAccessToken(value) {
+  return /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(value || ""));
+}
 function tmdbApiKeySettingsLayout() {
   return [
-    { type: "header", label: "TMDB API Anahtar\u0131 (opsiyonel)" },
+    { type: "header", label: "TMDB API Anahtarı (opsiyonel)" },
     {
       type: "text",
       key: "tmdbApiKey",
-      label: "Kendi TMDB API anahtar\u0131n",
-      description: "Bo\u015F b\u0131rak\u0131rsan payla\u015F\u0131lan varsay\u0131lan anahtar kullan\u0131l\u0131r. Kendi TMDB v3 API anahtar\u0131n\u0131 girersen (themoviedb.org hesab\u0131ndan \xFCcretsiz al\u0131n\u0131r) bu ekrandaki t\xFCm TMDB istekleri onunla yap\u0131l\u0131r.",
+      label: "Kendi TMDB API anahtarın",
+      description: "İsteğe bağlıdır. Anahtar girilirse TMDB API kullanılır; boş bırakılırsa herkese açık TMDB sayfasından başlık/yıl okunur.",
       defaultValue: ""
     }
   ];
@@ -175,50 +180,92 @@ function fetchJson(_0) {
     const _a = options, { timeout = DEFAULT_TIMEOUT_MS } = _a, rest = __objRest(_a, ["timeout"]);
     return yield withTimeout((() => __async(this, null, function* () {
       const response = yield fetch(url, __spreadValues({ signal: timeoutSignal(timeout) }, rest));
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} on ${url}`);
-      }
+      if (!response.ok)
+        throw new Error("HTTP " + response.status + " on " + url);
       return yield response.json();
     }))(), timeout, url);
   });
 }
-function getTmdbInfo(tmdbId, mediaType) {
+function tmdbPublicTitle(html) {
+  const source = String(html || "");
+  const patterns = [
+    /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i,
+    /<title[^>]*>([\s\S]*?)<\/title>/i
+  ];
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    if (!match || !match[1])
+      continue;
+    const title = String(match[1]).replace(/&amp;/gi, "&").replace(/&#39;|&apos;/gi, "'").replace(/\s*(?:\||-|—)\s*The Movie Database.*$/i, "").trim();
+    if (title)
+      return title;
+  }
+  return "";
+}
+function tmdbPublicInfo(tmdbId, mediaType) {
   return __async(this, null, function* () {
     const empty = { title: "", originalTitle: "", turkishTitle: "", year: "", imdbId: null };
-    const apiKey = getTmdbApiKey();
-    if (!apiKey)
-      return empty;
     const type = mediaType === "tv" ? "tv" : "movie";
+    const url = "https://www.themoviedb.org/" + type + "/" + encodeURIComponent(String(tmdbId));
+    try {
+      const response = yield withTimeout(fetch(url, {
+        headers: { Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8" },
+        signal: timeoutSignal(7000)
+      }), 7500, url);
+      if (!response || !response.ok)
+        return empty;
+      const title = tmdbPublicTitle(yield response.text());
+      if (!title)
+        return empty;
+      const yearMatch = title.match(/\b(?:19|20)\d{2}\b/);
+      return { title, originalTitle: title, turkishTitle: "", year: yearMatch ? yearMatch[0] : "", imdbId: null };
+    } catch (e) {
+      return empty;
+    }
+  });
+}
+function getTmdbInfo(tmdbId, mediaType) {
+  return __async(this, null, function* () {
+    const type = mediaType === "tv" ? "tv" : "movie";
+    const apiKey = getTmdbApiKey();
     return yield tmdbInfoCache.remember(
-      `${type}:${tmdbId}`,
+      type + ":" + tmdbId,
       () => __async(this, null, function* () {
-        var _a, _b, _c, _d, _e, _f;
-        try {
-          const url = `https://api.themoviedb.org/3/${type}/${tmdbId}?api_key=${apiKey}&append_to_response=external_ids,translations`;
-          const data = yield fetchJson(url);
-          let turkishTitle = "";
-          const translations = ((_a = data.translations) == null ? void 0 : _a.translations) || [];
-          const tr = translations.find((t) => t.iso_3166_1 === "TR" || t.iso_639_1 === "tr");
-          if (tr) {
-            turkishTitle = ((_b = tr.data) == null ? void 0 : _b.title) || ((_c = tr.data) == null ? void 0 : _c.name) || "";
+        if (apiKey) {
+          try {
+            let url = "https://api.themoviedb.org/3/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?append_to_response=external_ids,translations";
+            const options = {};
+            if (isTmdbAccessToken(apiKey))
+              options.headers = { Accept: "application/json", Authorization: "Bearer " + apiKey };
+            else
+              url += "&api_key=" + encodeURIComponent(apiKey);
+            const data = yield fetchJson(url, options);
+            let turkishTitle = "";
+            const translations = data && data.translations && data.translations.translations || [];
+            const tr = translations.find((t) => t && (t.iso_3166_1 === "TR" || t.iso_639_1 === "tr"));
+            if (tr)
+              turkishTitle = tr.data && (tr.data.title || tr.data.name) || "";
+            const info = {
+              title: data && (data.name || data.title || data.original_title || data.original_name) || "",
+              originalTitle: data && (data.original_title || data.original_name) || "",
+              turkishTitle,
+              year: data && (data.release_date || data.first_air_date || "").slice(0, 4) || "",
+              imdbId: data && data.external_ids && data.external_ids.imdb_id || data && data.imdb_id || null
+            };
+            if (info.title || info.originalTitle || info.imdbId)
+              return info;
+          } catch (e) {
           }
-          return {
-            title: data.name || data.title || data.original_title || "",
-            originalTitle: data.original_title || data.original_name || "",
-            turkishTitle,
-            year: ((_d = data.release_date) == null ? void 0 : _d.slice(0, 4)) || ((_e = data.first_air_date) == null ? void 0 : _e.slice(0, 4)) || "",
-            imdbId: ((_f = data.external_ids) == null ? void 0 : _f.imdb_id) || data.imdb_id || null
-          };
-        } catch (e) {
-          return empty;
         }
+        return yield tmdbPublicInfo(tmdbId, type);
       }),
-      30 * 60 * 1e3,
-      // Boş/hatalı sonucu cache'leme ki geçici bir hata kalıcı boş sonuca dönüşmesin.
+      30 * 60 * 1000,
       (v) => !!(v && (v.title || v.originalTitle || v.imdbId))
     );
   });
 }
+
 
 // src/shared/domains.js
 var DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
@@ -967,7 +1014,7 @@ function fullHdProbeMediaUrl(url, referer) {
     Referer: referer || "",
     Origin: originOf(referer || value)
   });
-  if (/\.m3u8(?:[?#]|$)/i.test(value) || /[?&]ext=video\.m3u8/i.test(value)) {
+  if (isProviderHlsUrl(value)) {
     return fetch(value, {
       method: "GET",
       headers: __spreadProps(__spreadValues({}, headers), {
@@ -1055,10 +1102,10 @@ function extractHost(embedUrl, referer) {
 
 
 /* Site-specific provider implementation. */
-var SITE_ID = "720izle";
-var SITE_NAME = "720izle";
-var PROVIDER_VERSION = "1.0.0";
-var DOMAIN_CANDIDATES = ["https://720izle.com","https://www.720izle.com"];
+var SITE_ID = "filmmakinesi";
+var SITE_NAME = "FilmMakinesi";
+var PROVIDER_VERSION = "1.0.1";
+var DOMAIN_CANDIDATES = ["https://filmmakinesi.to","https://www.filmmakinesi.to"];
 var SITE_HEADERS2 = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
   "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
@@ -1249,19 +1296,15 @@ function scoreSiteLink(item, targets, year) {
 }
 
 function searchUrlsFor(domain, query) {
-  var encoded = encodeURIComponent(query);
-  return [
-    domain + "/?s=" + encoded,
-    domain + "/?search=" + encoded,
-    domain + "/search/?q=" + encoded
-  ];
+  const encoded = encodeURIComponent(query);
+  return [domain + "/arama/?s=" + encoded, domain + "/?s=" + encoded, domain + "/?search=" + encoded, domain + "/search/?q=" + encoded];
 }
 
 function searchDomain(domain, targets, year) {
   return __async(this, null, function* () {
     var jobs = [];
     for (var q of targets.slice(0, 2)) {
-      for (var url of searchUrlsFor(domain, q).slice(0, 2)) {
+      for (var url of searchUrlsFor(domain, q).slice(0, 4)) {
         jobs.push(withTimeout(requestText(url, { headers: { Referer: domain + "/" } }), 5000, url).then(function(html) {
           return extractSiteLinks(html, domain);
         }).catch(function() {
@@ -1445,50 +1488,64 @@ function flattenSiteScx(scx) {
 }
 
 function providerMediaType(url) {
-  return /\.m3u8(?:[?#]|$)/i.test(url) || /(?:[?&](?:ext|type)=video\.m3u8)/i.test(url) ? "m3u8" : "mp4";
+  return isProviderHlsUrl(url) ? "m3u8" : "mp4";
 }
-
+function isProviderHlsUrl(url) {
+  const value = String(url || "");
+  return /\.m3u8(?:[?#]|$)/i.test(value) ||
+    /[?&](?:ext|type|format|mime)=?(?:video\.)?m3u8/i.test(value) ||
+    /\/(?:hls|playlist|manifest|stream)(?:[/?#]|$)/i.test(value) ||
+    /(?:^|[?&])(?:stream|source|format|type)=hls(?:[&#]|$)/i.test(value);
+}
+function isProviderDirectMediaUrl(url) {
+  const value = String(url || "");
+  if (!/^https?:\/\//i.test(value) || isAdMediaUrl(value))
+    return false;
+  return isProviderHlsUrl(value) ||
+    /\.(?:mp4|mkv|webm)(?:[?#]|$)/i.test(value) ||
+    /\/(?:media|file|download)(?:[/?#]|$)/i.test(value);
+}
 function likelyProviderMedia(url) {
-  var value = String(url || "");
+  const value = String(url || "");
   return /^https?:\/\//i.test(value) && !isAdMediaUrl(value) && (
-    /\.(?:m3u8|mp4)(?:[?#]|$)/i.test(value) ||
-    /(?:hotstream|rapid|close|trplayer|vidmoxy|filemoon|dood|streamtape|mixdrop|vidmoly|embed|player)/i.test(value)
+    isProviderDirectMediaUrl(value) ||
+    /(?:hotstream|rapid|close(?:load)?|trplayer|vidmoxy|filemoon|dood|streamtape|mixdrop|vidmoly|embed|player)/i.test(value)
   );
 }
-
 function extractSiteMediaUrls(html, base) {
-  var result = [];
-  var seen = /* @__PURE__ */ new Set();
-  var source = String(html || "").replace(/\\u0026/gi, "&").replace(/\\\//g, "/");
-  var patterns = [
-    /https?:\/\/[^"'\\\s<>]+?\.(?:m3u8|mp4)(?:\?[^"'\\\s<>]*)?/gi,
-    /(?:file|src|source|video_location|hls|playlist)\s*["']?\s*[:=]\s*["'](https?:[^"'<>\\\s]+)["']/gi,
-    /(?:data-(?:src|url|file|video|stream)|data-litespeed-src)\s*=\s*["'](https?:[^"']+)["']/gi
+  const result = [], seen = /* @__PURE__ */ new Set();
+  const source = String(html || "").replace(/\\u0026/gi, "&").replace(/\\\//g, "/");
+  const add = (raw) => {
+    const decoded = siteHtmlDecode(String(raw || "")).replace(/[),;]+$/g, "").trim();
+    const url = absoluteSiteUrl(decoded, base);
+    if (!url || !likelyProviderMedia(url) || seen.has(url))
+      return;
+    seen.add(url);
+    result.push(url);
+  };
+  const patterns = [
+    /(?:(?:https?:)?\/\/)[^"'\\\s<>]+(?:\.(?:m3u8|mp4|mkv|webm)(?:[?#][^"'\\\s<>]*)?|\/(?:hls|playlist|manifest|stream)(?:[/?#][^"'\\\s<>]*)?)/gi,
+    /(?:file|src|source|video_location|hls|playlist|contentUrl|video_url|stream_url)\s*["']?\s*[:=]\s*["']([^"']+)["']/gi,
+    /(?:data-(?:src|url|file|video|video_url|video-url|stream|source)|data-litespeed-src)\s*=\s*["']([^"']+)["']/gi
   ];
-  for (var re of patterns) {
-    var match;
-    while ((match = re.exec(source)) !== null) {
-      var url = siteHtmlDecode(match[1] || match[0]).replace(/[),;]+$/g, "");
-      if (!likelyProviderMedia(url) || seen.has(url))
-        continue;
-      seen.add(url);
-      result.push(url);
-    }
+  for (const re of patterns) {
+    let match;
+    while ((match = re.exec(source)) !== null)
+      add(match[1] || match[0]);
   }
   return result;
 }
 
 function extractSiteFrames(html, base) {
-  var result = [];
-  var seen = /* @__PURE__ */ new Set();
-  var re = /<(?:iframe|frame|embed|object)\b([^>]*)>/gi;
-  var match;
+  const result = [], seen = /* @__PURE__ */ new Set();
+  const re = /<(?:iframe|frame|embed|object|video|source)\b([^>]*)>/gi;
+  let match;
   while ((match = re.exec(String(html || ""))) !== null) {
-    var attrs = match[1] || "";
-    var srcRe = /\b(?:src|data|data-src|data-litespeed-src|data-iframe|data-embed|data-url|data-player|data-href)\s*=\s*(['"])([\s\S]*?)\1/gi;
-    var srcMatch;
+    const attrs = match[1] || "";
+    const srcRe = /\b(?:src|data|data-src|data-litespeed-src|data-iframe|data-embed|data-url|data-player|data-href|data-video_url|data-video-url|data-source|data-file|contentUrl)\s*=\s*(["'])([\s\S]*?)\1/gi;
+    let srcMatch;
     while ((srcMatch = srcRe.exec(attrs)) !== null) {
-      var url = absoluteSiteUrl(srcMatch[2], base);
+      const url = absoluteSiteUrl(srcMatch[2], base);
       if (!url || isAdMediaUrl(url) || seen.has(url))
         continue;
       if (!/^(?:about:|javascript:|data:)/i.test(url)) {
@@ -1521,31 +1578,56 @@ function extractSiteTracks(html, base) {
 }
 
 function collectProviderEmbeds(html, base) {
-  var result = [];
-  var seen = /* @__PURE__ */ new Set();
-  var add = function(url, label) {
-    var value = absoluteSiteUrl(url, base);
+  const result = [], seen = /* @__PURE__ */ new Set();
+  const add = (url, label) => {
+    const value = absoluteSiteUrl(url, base);
     if (!value || isAdMediaUrl(value) || seen.has(value))
       return;
-    if (!likelyProviderMedia(value) && !/^(?:https?:\/\/)?(?:www\.)?(?:hotstream|rapid|close|trplayer|vidmoxy|filemoon|dood|streamtape|mixdrop|vidmoly)\./i.test(value))
+    if (!likelyProviderMedia(value) && !/^(?:https?:\/\/)?(?:www\.)?(?:hotstream|rapid|close(?:load)?|trplayer|vidmoxy|filemoon|dood|streamtape|mixdrop|vidmoly)\./i.test(value))
       return;
     seen.add(value);
     result.push({ url: value, label: label || "Embed" });
   };
-  for (var url of extractSiteMediaUrls(html, base))
+  for (const url of extractSiteMediaUrls(html, base))
     add(url, "Media");
-  for (var frame of extractSiteFrames(html, base))
+  for (const url of extractCloseLoadMedia(html, base))
+    add(url, "CloseLoad");
+  for (const frame of extractSiteFrames(html, base))
     add(frame, "Embed");
-  var scx = extractSiteScx(html);
-  for (var entry of flattenSiteScx(scx)) {
-    var decoded = decodeProviderLink(entry.value);
+  const scx = extractSiteScx(html);
+  for (const entry of flattenSiteScx(scx)) {
+    const decoded = decodeProviderLink(entry.value);
     if (decoded)
       add(decoded, entry.label + " " + entry.language + (entry.part ? " • Part " + entry.part : ""));
   }
   return result;
 }
 
-/* Minimal CryptoJS-compatible AES-256-CBC path used by hotstream.club embeds. */
+function extractCloseLoadMedia(html, base) {
+  const result = [], seen = /* @__PURE__ */ new Set();
+  const add = (raw) => {
+    const url = absoluteSiteUrl(raw, base);
+    if (!url || isAdMediaUrl(url) || seen.has(url))
+      return;
+    if (!/close(?:load)?/i.test(url) && !isProviderDirectMediaUrl(url))
+      return;
+    seen.add(url);
+    result.push(url);
+  };
+  const source = String(html || "").replace(/\\u0026/gi, "&").replace(/\\\//g, "/");
+  const patterns = [
+    /(?:data-(?:video[_-]?url|source|file|url)|contentUrl)\s*=\s*["']([^"']+)["']/gi,
+    /<(?:iframe|frame|embed)\b[^>]*(?:src|data-src|data-url)\s*=\s*["']([^"']*(?:close(?:load)?)[^"']*)["']/gi
+  ];
+  for (const re of patterns) {
+    let match;
+    while ((match = re.exec(source)) !== null)
+      add(match[1]);
+  }
+  return result;
+}
+
+/* Minimal CryptoJS-compatible AES-256-CBC path used by hotstream.club embeds. *//* Minimal CryptoJS-compatible AES-256-CBC path used by hotstream.club embeds. */
 var HOT_SBOX = (function() {
   var hex = "637c777bf26b6fc53001672bfed7ab76ca82c97dfa5947f0add4a2af9ca472c0b7fd9326363ff7cc34a5e5f171d8311504c723c31896059a071280e2eb27b27509832c1a1b6e5aa0523bd6b329e32f8453d100ed20fcb15b6acbbe394a4c58cfd0efaafb434d338545f9027f503c9fa851a3408f929d38f5bcb6da2110fff3d2cd0c13ec5f974417c4a77e3d645d197360814fdc222a908846eeb814de5e0bdbe0323a0a4906245cc2d3ac629195e479e7c8376d8dd54ea96c56f4ea657aae08ba78252e1ca6b4c6e8dd741f4bbd8b8a703eb5664803f60e613557b986c11d9ee1f8981169d98e949b1e87e9ce5528df8ca1890dbfe6426841992d0fb054bb16";
   var out = [];
@@ -1869,32 +1951,42 @@ function resolveHotstream(embedUrl, referer, title) {
 }
 
 function resolveProviderFrame(url, referer, title, depth) {
-  return __async(this, null, function* () {
-    var currentDepth = Number(depth) || 0;
-    if (currentDepth > 2)
+  return __async(this, arguments, function* () {
+    const currentDepth = Number(depth) || 0;
+    if (!url || !/^https?:\/\//i.test(url) || currentDepth > 3)
       return [];
+    if (isProviderDirectMediaUrl(url) && !/\/(?:embed|player|watch)(?:[/?#]|$)/i.test(url)) {
+      return [{
+        url,
+        host: (new URL(url)).hostname.split(".")[0],
+        type: providerMediaType(url),
+        headers: { Referer: referer || "" },
+        subtitles: []
+      }];
+    }
     if (/hotstream\.club/i.test(url))
       return yield resolveHotstream(url, referer, title);
-    var direct = [];
+    const direct = [];
     try {
-      var frameHtml = yield requestText(url, { timeout: 8000, headers: { Referer: referer || "" } });
-      var directUrls = extractSiteMediaUrls(frameHtml, url);
-      for (var directUrl of directUrls)
+      const frameHtml = yield requestText(url, { timeout: 8000, headers: { Referer: referer || "" } });
+      const directUrls = [...extractSiteMediaUrls(frameHtml, url), ...extractCloseLoadMedia(frameHtml, url)];
+      for (const directUrl of directUrls)
         direct.push({ url: directUrl, host: (new URL(url)).hostname.split(".")[0], type: providerMediaType(directUrl), headers: { Referer: url }, subtitles: extractSiteTracks(frameHtml, url) });
       if (direct.length)
         return direct;
-      var nested = extractSiteFrames(frameHtml, url);
-      for (var nestedUrl of nested.slice(0, 4)) {
-        var nestedStreams = yield resolveProviderFrame(nestedUrl, url, title, currentDepth + 1);
+      for (const nestedUrl of extractSiteFrames(frameHtml, url).slice(0, 6)) {
+        const nestedStreams = yield resolveProviderFrame(nestedUrl, url, title, currentDepth + 1);
         if (nestedStreams.length)
           return nestedStreams;
       }
-    } catch (e) {}
+    } catch (e) {
+    }
     try {
-      var known = yield extractHost(url, referer || "");
+      const known = yield extractHost(url, referer || "");
       if (known && known.length)
         return known;
-    } catch (e) {}
+    } catch (e) {
+    }
     return [];
   });
 }

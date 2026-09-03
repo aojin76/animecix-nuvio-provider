@@ -1,6 +1,6 @@
 {
   "name": "Animecix Nuvio",
-  "version": "2.12.3",
+  "version": "2.12.4",
   "scrapers": [
     {
       "id": "animecix",
@@ -103,13 +103,13 @@
       "id": "hdfilmcehennemi",
       "name": "HDFilmCehennemi",
       "description": "HDFilmCehennemi film ve dizi kaynağı; alan adı otomatik yenilenir",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "author": "aojin76",
       "supportedTypes": [
         "movie",
         "tv"
       ],
-      "filename": "providers/hdfilmcehennemi-1.0.6.js",
+      "filename": "providers/hdfilmcehennemi-1.0.7.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://www.hdfilmcehennemi.nl/favicon.ico",
@@ -128,12 +128,12 @@
       "id": "fullhdfilmizlesenow",
       "name": "FullHDFilmizlesene.now",
       "description": "FullHDFilmizlesene.now film kaynağı; alan adı otomatik yenilenir",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": "aojin76",
       "supportedTypes": [
         "movie"
       ],
-      "filename": "providers/fullhdfilmizlesenow-1.0.1.js",
+      "filename": "providers/fullhdfilmizlesenow-1.0.2.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://www.fullhdfilmizlesene.now/favicon.ico",
@@ -152,13 +152,13 @@
       "id": "filmmakinesi",
       "name": "FilmMakinesi",
       "description": "FilmMakinesi.to film ve dizi kaynağı; Cloudflare veya bölgesel erişim kısıtı olabilir",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": "aojin76",
       "supportedTypes": [
         "movie",
         "tv"
       ],
-      "filename": "providers/filmmakinesi-1.0.0.js",
+      "filename": "providers/filmmakinesi-1.0.1.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://filmmakinesi.to/favicon.ico",
@@ -177,13 +177,13 @@
       "id": "720izle",
       "name": "720izle",
       "description": "720izle.com film ve dizi kaynağı; Hotstream HLS oynatıcısı",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": "aojin76",
       "supportedTypes": [
         "movie",
         "tv"
       ],
-      "filename": "providers/720izle-1.0.0.js",
+      "filename": "providers/720izle-1.0.1.js",
       "enabled": true,
       "hasSettings": true,
       "logo": "https://720izle.com/wp-content/uploads/2025/09/cropped-icons8-popcorn-50-32x32.png",
