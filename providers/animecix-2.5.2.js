@@ -28,15 +28,16 @@ var ANIMECIX = "https://animecix.tv";
 var TAU_VIDEO = "https://tau-video.xyz";
 var TMDB = "https://api.themoviedb.org/3";
 var EPISODE_MAPPING = "https://id-mapping-api-malid.hf.space/api/resolve";
-var PROVIDER_VERSION = "2.5.1";
+var PROVIDER_VERSION = "2.5.2";
 var TAU_STREAM_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   Referer: TAU_VIDEO + "/",
   Origin: TAU_VIDEO
 };
 var BLEACH_SEASON_COUNTS = [20, 21, 22, 28, 18, 22, 20, 16, 22, 16, 7, 17, 36, 51, 26, 24];
-var BLEACH_TYBW_TMDB_IDS = ["214779", "212624"];
+var BLEACH_TYBW_TMDB_IDS = ["214779", "212624", "14986406", "tt14986406"];
 var BLEACH_TYBW_SEASON_COUNTS = [13, 13, 14, 6];
+var DEFAULT_TMDB_API_KEY = "";
 function getTmdbKeys() {
   var keys = [];
   try {
@@ -168,6 +169,18 @@ function getTmdbTitle(tmdbId, mediaType) {
         }
       } catch (_) {
       }
+    }
+    if (BLEACH_TYBW_TMDB_IDS.indexOf(String(tmdbId)) !== -1) {
+      var fallbackSeasons = [];
+      for (var s = 0; s < BLEACH_TYBW_SEASON_COUNTS.length; s++) {
+        fallbackSeasons.push({ season_number: s + 1, episode_count: BLEACH_TYBW_SEASON_COUNTS[s] });
+      }
+      return {
+        title: "Bleach: Thousand-Year Blood War",
+        original: "Bleach: Sennen Kessen-hen",
+        imdbId: "tt14986406",
+        seasons: fallbackSeasons
+      };
     }
     return null;
   });
@@ -477,12 +490,12 @@ function getStreams(tmdbId, mediaType, season, episode) {
 function onSettings() {
   return __async(this, null, function* () {
     return [
-      { type: "header", label: "TMDB API Anahtar\u0131 (gerekli)" },
+      { type: "header", label: "TMDB API Anahtar\u0131 (genel içerik için)" },
       {
         type: "text",
         key: "tmdbApiKey",
         label: "TMDB API Key veya Read Access Token",
-        description: "Kendi TMDB v3 API Key'ini veya v4 Read Access Token'\u0131n\u0131 gir. Anahtar koda kaydedilmez.",
+        description: "Genel içerik eşleştirmesi için TMDB v3 API Key veya v4 Read Access Token'\u0131 gir; bilinen Bleach TYBW kimliklerinde boş bırakılabilir.",
         defaultValue: ""
       }
     ];

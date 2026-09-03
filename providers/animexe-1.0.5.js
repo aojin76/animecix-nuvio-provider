@@ -9,7 +9,7 @@
 var BASE_URL = "https://animexe.com";
 var TMDB_URL = "https://api.themoviedb.org/3";
 var REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
-var PROVIDER_VERSION = "1.0.4";
+var PROVIDER_VERSION = "1.0.5";
 var DEFAULT_TMDB_API_KEY = "";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 var PAGE_HEADERS = {
@@ -96,6 +96,23 @@ function getTmdbApiKey() {
   return DEFAULT_TMDB_API_KEY;
 }
 
+function knownTybwInfo(tmdbId) {
+  if (BLEACH_TYBW_TMDB_IDS.indexOf(String(tmdbId || "")) === -1)
+    return null;
+  var seasons = [];
+  for (var i = 0; i < BLEACH_TYBW_SEASON_COUNTS.length; i++)
+    seasons.push({ season_number: i + 1, episode_count: BLEACH_TYBW_SEASON_COUNTS[i] });
+  return {
+    title: "Bleach: Thousand-Year Blood War",
+    originalTitle: "Bleach: Sennen Kessen-hen",
+    turkishTitle: "Bleach: Thousand-Year Blood War",
+    year: "2022",
+    imdbId: "tt14986406",
+    seasons: seasons,
+    tmdbId: String(tmdbId)
+  };
+}
+
 function isTmdbAccessToken(value) {
   return /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(value || ""));
 }
@@ -127,10 +144,14 @@ function getTmdbInfo(tmdbId, mediaType) {
     turkishTitle: "",
     year: "",
     imdbId: null,
-    seasons: []
+    seasons: [],
+    tmdbId: String(tmdbId)
   };
   var key = getTmdbApiKey();
   if (!key) {
+    var known = knownTybwInfo(tmdbId);
+    if (known)
+      return Promise.resolve(known);
     try { console.log("[Animexe] TMDB anahtarı eksik; provider ayarlarından tmdbApiKey girin"); } catch (_) {
     }
     return Promise.resolve(empty);
@@ -159,7 +180,7 @@ function getTmdbInfo(tmdbId, mediaType) {
     tmdbCache[cacheKey] = info;
     return info;
   }).catch(function() {
-    return empty;
+    return knownTybwInfo(tmdbId) || empty;
   });
 }
 
@@ -361,21 +382,28 @@ function findCandidates(info, mediaType, season, domain) {
       }
     }
     if (preferTybw) {
-      var hasTybw = false;
+      var canonicalSlug = "bleach-thousand-year-blood-war-7443";
+      var canonicalIndex = -1;
       for (var c = 0; c < output.length; c++) {
-        if (normalizeTitle(output[c] && output[c].slug).indexOf("bleachthousandyearbloodwar") !== -1) {
-          hasTybw = true;
+        if (normalizeTitle(output[c] && output[c].slug) === normalizeTitle(canonicalSlug)) {
+          canonicalIndex = c;
           break;
         }
       }
-      if (!hasTybw)
-        output.unshift({ slug: "bleach-thousand-year-blood-war-7443", title: "Bleach: Thousand-Year Blood War" });
+      if (canonicalIndex < 0) {
+        output.unshift({ slug: canonicalSlug, title: "Bleach: Thousand-Year Blood War" });
+      } else if (canonicalIndex > 0) {
+        var canonicalCandidate = output.splice(canonicalIndex, 1)[0];
+        output.unshift(canonicalCandidate);
+      }
     }
     return output.slice(0, 6);
   });
 }
 
 var BLEACH_SEASON_COUNTS = [20, 21, 22, 28, 18, 22, 20, 16, 22, 16, 7, 17, 36, 51, 26, 24];
+var BLEACH_TYBW_TMDB_IDS = ["214779", "212624", "14986406", "tt14986406"];
+var BLEACH_TYBW_SEASON_COUNTS = [13, 13, 14, 6];
 
 function isBleachMain(info) {
   if (String(info && info.tmdbId) === "30984")
@@ -406,6 +434,31 @@ function bleachAbsoluteEpisode(season, episode) {
   return offset + e;
 }
 
+function getBleachTybwSeasonCounts(info) {
+  var seasons = info && Array.isArray(info.seasons) ? info.seasons : [];
+  var counts = [];
+  for (var i = 0; i < seasons.length; i++) {
+    var item = seasons[i] || {};
+    var number = parseInt(item.season_number, 10);
+    var count = parseInt(item.episode_count, 10);
+    if (number >= 1 && count >= 1)
+      counts[number - 1] = count;
+  }
+  return counts.length && counts[0] ? counts : BLEACH_TYBW_SEASON_COUNTS;
+}
+
+function bleachTybwAbsoluteEpisode(info, season, episode) {
+  var s = parseInt(season, 10) || 1;
+  var e = parseInt(episode, 10) || 1;
+  var counts = getBleachTybwSeasonCounts(info);
+  if (s < 1 || s > counts.length || !counts[s - 1] || e < 1 || e > counts[s - 1])
+    return 0;
+  var offset = 0;
+  for (var i = 0; i < s - 1; i++)
+    offset += counts[i] || 0;
+  return offset + e;
+}
+
 function episodeUrlVariants(candidate, info, mediaType, season, episode, domain) {
   var value = String(candidate && candidate.slug || "").replace(/^\/+|\/+$/g, "");
   if (!value)
@@ -416,24 +469,28 @@ function episodeUrlVariants(candidate, info, mediaType, season, episode, domain)
   var urls = [];
   var tybwRequest = isBleachTybwRequest(info, mediaType);
   var normalizedSlug = normalizeTitle(value);
-  if (tybwRequest && isBleachMain(info) && normalizedSlug.indexOf("bleachthousandyearbloodwar") === -1)
+  if (tybwRequest && normalizedSlug.indexOf("bleachthousandyearbloodwar") === -1)
     return [];
   function add(seasonNumber, episodeNumber) {
     var url = site + "/watch/" + value + "/" + String(seasonNumber) + "/" + String(episodeNumber);
     if (urls.indexOf(url) === -1)
       urls.push(url);
   }
-  if (mediaType === "movie")
+  if (mediaType === "movie") {
     add(1, 1);
-  else if (tybwRequest)
-    // Animexe keeps TYBW in a separate title with a single episode sequence.
-    add(1, e);
-  else
+  } else if (tybwRequest) {
+    // Animexe has a season-aware TYBW route; absolute numbering is a fallback.
     add(s, e);
-  if (mediaType !== "movie" && !tybwRequest && isBleachMain(info) && s !== 1) {
-    var absolute = bleachAbsoluteEpisode(s, e);
-    if (absolute)
+    var absolute = bleachTybwAbsoluteEpisode(info, s, e);
+    if (absolute && absolute !== e)
       add(1, absolute);
+  } else {
+    add(s, e);
+  }
+  if (mediaType !== "movie" && !tybwRequest && isBleachMain(info) && s !== 1) {
+    var mainAbsolute = bleachAbsoluteEpisode(s, e);
+    if (mainAbsolute)
+      add(1, mainAbsolute);
   }
   return urls;
 }
@@ -702,12 +759,12 @@ function getSubtitles(tmdbId, mediaType, season, episode) {
 
 function onSettings() {
   return Promise.resolve([
-    { type: "header", label: "TMDB API Anahtarı (gerekli)" },
+    { type: "header", label: "TMDB API Anahtarı (genel içerik için)" },
     {
       type: "text",
       key: "tmdbApiKey",
       label: "TMDB API Key veya Read Access Token",
-      description: "Başlık eşleştirmesi için kendi TMDB v3 API Key'ini veya v4 Read Access Token'ını gir.",
+      description: "Genel içerik eşleştirmesi için TMDB v3 API Key veya v4 Read Access Token'ını gir; bilinen Bleach TYBW kimliklerinde boş bırakılabilir.",
       defaultValue: ""
     }
   ]);
