@@ -1,5 +1,5 @@
 /**
- * fullhdfilmizlesenow-1.0.1 - Built from src/fullhdfilmizlesenow/
+ * fullhdfilmizlesenow-1.0.2 - Built from src/fullhdfilmizlesenow/
  * Generated: 2026-09-02T13:31:38.175Z
  */
 var __defProp = Object.defineProperty;
@@ -145,27 +145,32 @@ var DEFAULT_TMDB_API_KEY = "";
 function getTmdbApiKey() {
   try {
     const settings = typeof globalThis !== "undefined" ? globalThis.SCRAPER_SETTINGS : null;
-    const userKey = (settings == null ? void 0 : settings.tmdbApiKey) ? String(settings.tmdbApiKey).trim() : "";
+    const userKey = settings && (settings.tmdbApiKey || settings.tmdb_api_key || settings.apiKey ||
+      settings.TMDB_API_KEY || settings.tmdbAccessToken || settings.tmdb_access_token || settings.tmdbToken);
     if (userKey)
-      return userKey;
+      return String(userKey).trim();
   } catch (e) {
   }
   try {
-    const injected = typeof globalThis !== "undefined" ? globalThis.TMDB_API_KEY : "";
+    const injected = typeof globalThis !== "undefined" ? (globalThis.TMDB_API_KEY || globalThis.TMDB_ACCESS_TOKEN ||
+      globalThis.TMDB_API_ACCESS_TOKEN || globalThis.__TMDB_API_KEY) : "";
     if (injected)
       return String(injected).trim();
   } catch (e) {
   }
   return DEFAULT_TMDB_API_KEY;
 }
+function isTmdbAccessToken(value) {
+  return /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(value || ""));
+}
 function tmdbApiKeySettingsLayout() {
   return [
-    { type: "header", label: "TMDB API Anahtarı (gerekli)" },
+    { type: "header", label: "TMDB API Anahtarı (opsiyonel)" },
     {
       type: "text",
       key: "tmdbApiKey",
       label: "Kendi TMDB API anahtarın",
-      description: "Başlık eşleştirmesi için kendi TMDB v3 API anahtarını veya v4 Read Access Token'ını gir. Nuvio ortamında global TMDB_API_KEY sağlanıyorsa bu da kullanılabilir.",
+      description: "İsteğe bağlıdır. Anahtar girilirse TMDB API kullanılır; boş bırakılırsa herkese açık TMDB sayfasından başlık/yıl okunur.",
       defaultValue: ""
     }
   ];
@@ -175,50 +180,92 @@ function fetchJson(_0) {
     const _a = options, { timeout = DEFAULT_TIMEOUT_MS } = _a, rest = __objRest(_a, ["timeout"]);
     return yield withTimeout((() => __async(this, null, function* () {
       const response = yield fetch(url, __spreadValues({ signal: timeoutSignal(timeout) }, rest));
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} on ${url}`);
-      }
+      if (!response.ok)
+        throw new Error("HTTP " + response.status + " on " + url);
       return yield response.json();
     }))(), timeout, url);
   });
 }
-function getTmdbInfo(tmdbId, mediaType) {
+function tmdbPublicTitle(html) {
+  const source = String(html || "");
+  const patterns = [
+    /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i,
+    /<title[^>]*>([\s\S]*?)<\/title>/i
+  ];
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    if (!match || !match[1])
+      continue;
+    const title = String(match[1]).replace(/&amp;/gi, "&").replace(/&#39;|&apos;/gi, "'").replace(/\s*(?:\||-|—)\s*The Movie Database.*$/i, "").trim();
+    if (title)
+      return title;
+  }
+  return "";
+}
+function tmdbPublicInfo(tmdbId, mediaType) {
   return __async(this, null, function* () {
     const empty = { title: "", originalTitle: "", turkishTitle: "", year: "", imdbId: null };
-    const apiKey = getTmdbApiKey();
-    if (!apiKey)
-      return empty;
     const type = mediaType === "tv" ? "tv" : "movie";
+    const url = "https://www.themoviedb.org/" + type + "/" + encodeURIComponent(String(tmdbId));
+    try {
+      const response = yield withTimeout(fetch(url, {
+        headers: { Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8" },
+        signal: timeoutSignal(7000)
+      }), 7500, url);
+      if (!response || !response.ok)
+        return empty;
+      const title = tmdbPublicTitle(yield response.text());
+      if (!title)
+        return empty;
+      const yearMatch = title.match(/\b(?:19|20)\d{2}\b/);
+      return { title, originalTitle: title, turkishTitle: "", year: yearMatch ? yearMatch[0] : "", imdbId: null };
+    } catch (e) {
+      return empty;
+    }
+  });
+}
+function getTmdbInfo(tmdbId, mediaType) {
+  return __async(this, null, function* () {
+    const type = mediaType === "tv" ? "tv" : "movie";
+    const apiKey = getTmdbApiKey();
     return yield tmdbInfoCache.remember(
-      `${type}:${tmdbId}`,
+      type + ":" + tmdbId,
       () => __async(this, null, function* () {
-        var _a, _b, _c, _d, _e, _f;
-        try {
-          const url = `https://api.themoviedb.org/3/${type}/${tmdbId}?api_key=${apiKey}&append_to_response=external_ids,translations`;
-          const data = yield fetchJson(url);
-          let turkishTitle = "";
-          const translations = ((_a = data.translations) == null ? void 0 : _a.translations) || [];
-          const tr = translations.find((t) => t.iso_3166_1 === "TR" || t.iso_639_1 === "tr");
-          if (tr) {
-            turkishTitle = ((_b = tr.data) == null ? void 0 : _b.title) || ((_c = tr.data) == null ? void 0 : _c.name) || "";
+        if (apiKey) {
+          try {
+            let url = "https://api.themoviedb.org/3/" + type + "/" + encodeURIComponent(String(tmdbId)) + "?append_to_response=external_ids,translations";
+            const options = {};
+            if (isTmdbAccessToken(apiKey))
+              options.headers = { Accept: "application/json", Authorization: "Bearer " + apiKey };
+            else
+              url += "&api_key=" + encodeURIComponent(apiKey);
+            const data = yield fetchJson(url, options);
+            let turkishTitle = "";
+            const translations = data && data.translations && data.translations.translations || [];
+            const tr = translations.find((t) => t && (t.iso_3166_1 === "TR" || t.iso_639_1 === "tr"));
+            if (tr)
+              turkishTitle = tr.data && (tr.data.title || tr.data.name) || "";
+            const info = {
+              title: data && (data.name || data.title || data.original_title || data.original_name) || "",
+              originalTitle: data && (data.original_title || data.original_name) || "",
+              turkishTitle,
+              year: data && (data.release_date || data.first_air_date || "").slice(0, 4) || "",
+              imdbId: data && data.external_ids && data.external_ids.imdb_id || data && data.imdb_id || null
+            };
+            if (info.title || info.originalTitle || info.imdbId)
+              return info;
+          } catch (e) {
           }
-          return {
-            title: data.name || data.title || data.original_title || "",
-            originalTitle: data.original_title || data.original_name || "",
-            turkishTitle,
-            year: ((_d = data.release_date) == null ? void 0 : _d.slice(0, 4)) || ((_e = data.first_air_date) == null ? void 0 : _e.slice(0, 4)) || "",
-            imdbId: ((_f = data.external_ids) == null ? void 0 : _f.imdb_id) || data.imdb_id || null
-          };
-        } catch (e) {
-          return empty;
         }
+        return yield tmdbPublicInfo(tmdbId, type);
       }),
-      30 * 60 * 1e3,
-      // Boş/hatalı sonucu cache'leme ki geçici bir hata kalıcı boş sonuca dönüşmesin.
+      30 * 60 * 1000,
       (v) => !!(v && (v.title || v.originalTitle || v.imdbId))
     );
   });
 }
+
 
 // src/shared/domains.js
 var DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/aojin76/animecix-nuvio-provider/main/domains.json";
@@ -860,77 +907,58 @@ function extractOkRu(embedUrl) {
   });
 }
 function extractGenericStream(embedUrl, referer, hostName) {
-  return __async(this, null, function* () {
+  return __async(this, arguments, function* () {
     let html;
-    try {
-      html = yield fetchText(embedUrl, { headers: { Referer: referer } });
-    } catch (e) {
-      return [];
-    }
+    try { html = yield fetchText(embedUrl, { headers: { Referer: referer } }); }
+    catch (e) { return []; }
     const found = /* @__PURE__ */ new Set();
+    const add = (raw) => {
+      const url = fullMediaUrl(raw, embedUrl);
+      if (!url || !fullIsDirectMediaUrl(url) || found.has(url)) return;
+      found.add(url);
+    };
+    const source = String(html || "").replace(/\\u0026/gi, "&").replace(/\\\//g, "/");
     const patterns = [
-      /https?:\/\/[^"'\\\s<>]+?\.m3u8[^"'\\\s<>]*/gi,
-      /https?:\/\/[^"'\\\s<>]+?\.mp4[^"'\\\s<>]*/gi,
-      /["']file["']\s*[:=]\s*["'](https?:[^"']+)["']/gi,
-      /["']src["']\s*[:=]\s*["'](https?:[^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
-      /source\s+src=["'](https?:[^"']+)["']/gi
+      /(?:(?:https?:)?\/\/)[^"'\\\s<>]+(?:\.(?:m3u8|mp4|mkv|webm)(?:[?#][^"'\\\s<>]*)?|\/(?:hls|playlist|manifest|stream)(?:[/?#][^"'\\\s<>]*)?)/gi,
+      /(?:file|src|source|url|contentUrl|hls|playlist|video_url|video-url|stream_url)\s*["']?\s*[:=]\s*["']([^"']+)["']/gi,
+      /(?:data-(?:src|url|file|video|video_url|video-url|stream|source)|data-litespeed-src)\s*=\s*["']([^"']+)["']/gi
     ];
     for (const re of patterns) {
-      let m;
-      while ((m = re.exec(html)) !== null) {
-        const url = (m[1] || m[0]).replace(/\\u0026/g, "&").replace(/\\\//g, "/");
-        if (/^https?:\/\//.test(url) && !/google|facebook|analytics|parklogic/i.test(url)) {
-          found.add(url);
-        }
-      }
+      let match; while ((match = re.exec(source)) !== null) add(match[1] || match[0]);
     }
     const origin = originOf(embedUrl);
     return [...found].map((url) => ({
-      url,
-      host: hostName || "Embed",
-      type: /\.m3u8/i.test(url) ? "m3u8" : "mp4",
-      headers: { Referer: origin ? `${origin}/` : referer },
-      subtitles: collectSubtitles(html)
+      url, host: hostName || "Embed", type: fullIsHlsUrl(url) ? "m3u8" : "mp4",
+      headers: { Referer: origin ? origin + "/" : referer }, subtitles: collectSubtitles(html)
     }));
   });
-}
-function extractGenericStream(embedUrl, referer, hostName) {
-  return __async(this, null, function* () {
+}function extractGenericStream(embedUrl, referer, hostName) {
+  return __async(this, arguments, function* () {
     let html;
-    try {
-      html = yield fetchText(embedUrl, { headers: { Referer: referer } });
-    } catch (e) {
-      return [];
-    }
+    try { html = yield fetchText(embedUrl, { headers: { Referer: referer } }); }
+    catch (e) { return []; }
     const found = /* @__PURE__ */ new Set();
+    const add = (raw) => {
+      const url = fullMediaUrl(raw, embedUrl);
+      if (!url || !fullIsDirectMediaUrl(url) || found.has(url)) return;
+      found.add(url);
+    };
+    const source = String(html || "").replace(/\\u0026/gi, "&").replace(/\\\//g, "/");
     const patterns = [
-      /https?:\/\/[^"'\\\s<>]+?\.m3u8[^"'\\\s<>]*/gi,
-      /https?:\/\/[^"'\\\s<>]+?\.mp4[^"'\\\s<>]*/gi,
-      /["']file["']\s*[:=]\s*["'](https?:[^"']+)["']/gi,
-      /["']src["']\s*[:=]\s*["'](https?:[^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
-      /source\s+src=["'](https?:[^"']+)["']/gi
+      /(?:(?:https?:)?\/\/)[^"'\\\s<>]+(?:\.(?:m3u8|mp4|mkv|webm)(?:[?#][^"'\\\s<>]*)?|\/(?:hls|playlist|manifest|stream)(?:[/?#][^"'\\\s<>]*)?)/gi,
+      /(?:file|src|source|url|contentUrl|hls|playlist|video_url|video-url|stream_url)\s*["']?\s*[:=]\s*["']([^"']+)["']/gi,
+      /(?:data-(?:src|url|file|video|video_url|video-url|stream|source)|data-litespeed-src)\s*=\s*["']([^"']+)["']/gi
     ];
     for (const re of patterns) {
-      let m;
-      while ((m = re.exec(html)) !== null) {
-        const url = (m[1] || m[0]).replace(/\\u0026/g, "&").replace(/\\\//g, "/");
-        if (/^https?:\/\//.test(url) && !isAdMediaUrl(url) && !/google|facebook|analytics|parklogic/i.test(url)) {
-          found.add(url);
-        }
-      }
+      let match; while ((match = re.exec(source)) !== null) add(match[1] || match[0]);
     }
     const origin = originOf(embedUrl);
     return [...found].map((url) => ({
-      url,
-      host: hostName || "Embed",
-      type: /\.m3u8/i.test(url) ? "m3u8" : "mp4",
-      headers: { Referer: origin ? `${origin}/` : referer },
-      subtitles: collectSubtitles(html)
+      url, host: hostName || "Embed", type: fullIsHlsUrl(url) ? "m3u8" : "mp4",
+      headers: { Referer: origin ? origin + "/" : referer }, subtitles: collectSubtitles(html)
     }));
   });
-}
-
-function fullHdHeaderValue(response, name) {
+}function fullHdHeaderValue(response, name) {
   try {
     return response && response.headers && typeof response.headers.get === "function" ? String(response.headers.get(name) || "") : "";
   } catch (e) {
@@ -967,7 +995,7 @@ function fullHdProbeMediaUrl(url, referer) {
     Referer: referer || "",
     Origin: originOf(referer || value)
   });
-  if (/\.m3u8(?:[?#]|$)/i.test(value) || /[?&]ext=video\.m3u8/i.test(value)) {
+  if (fullIsHlsUrl(value)) {
     return fetch(value, {
       method: "GET",
       headers: __spreadProps(__spreadValues({}, headers), {
@@ -1218,7 +1246,7 @@ function flattenScx(scx) {
   for (const [key, item] of Object.entries(scx || {})) {
     if (!item || typeof item !== "object" || AD_HOST_KEYS.has(key.toLowerCase()))
       continue;
-    const sx = item.sx || {};
+    const sx = item.sx && typeof item.sx === "object" ? item.sx : item;
     const label = sourceLabel(key, item);
     const t = sx.t;
     if (Array.isArray(t)) {
@@ -1240,63 +1268,108 @@ function flattenScx(scx) {
   }
   return entries;
 }
-function collectFallbackEmbeds(html) {
+function fullMediaUrl(value, base) {
+  const raw = String(value || "").replace(/\\u0026/gi, "&").replace(/\\\//g, "/").trim();
+  if (!raw)
+    return "";
+  try { return new URL(raw, base || "").href; }
+  catch (e) { return /^https?:\/\//i.test(raw) ? raw : ""; }
+}
+function fullIsHlsUrl(url) {
+  const value = String(url || "");
+  return /\.m3u8(?:[?#]|$)/i.test(value) ||
+    /[?&](?:ext|type|format|mime)=?(?:video\.)?m3u8/i.test(value) ||
+    /\/(?:hls|playlist|manifest|stream)(?:[/?#]|$)/i.test(value) ||
+    /(?:^|[?&])(?:stream|source|format|type)=hls(?:[&#]|$)/i.test(value);
+}
+function fullIsDirectMediaUrl(url) {
+  const value = String(url || "");
+  if (!/^https?:\/\//i.test(value) || isAdMediaUrl(value))
+    return false;
+  if (/\/(?:embed|player|watch|iframe)(?:[/?#]|$)/i.test(value))
+    return false;
+  return fullIsHlsUrl(value) || /\.(?:mp4|mkv|webm)(?:[?#]|$)/i.test(value) ||
+    /\/(?:media|file|download)(?:[/?#]|$)/i.test(value);
+}
+function fullLikelyEmbedUrl(url) {
+  const value = String(url || "");
+  return /^https?:\/\//i.test(value) && !isAdMediaUrl(value) &&
+    /(?:rapid|close(?:load)?|trplayer|vidmoxy|vidmoly|filemoon|dood|streamtape|mixdrop|embed|player|watch)/i.test(value);
+}
+function fullExtractMediaUrls(html, base) {
   const result = [], seen = /* @__PURE__ */ new Set();
-  const re = /(?:data-src|data-url|src)\s*=\s*["'](https?:\/\/[^"']+)["']/gi;
-  let match;
-  while ((match = re.exec(String(html || ""))) !== null) {
-    const url = unescapeJson(match[1]);
-    if (seen.has(url) || isAdMediaUrl(url) || /google|facebook|analytics|gstatic/i.test(url))
-      continue;
-    seen.add(url);
-    result.push({ encoded: "", url, label: "Embed", language: "T\xFCrk\xE7e" });
+  const text = String(html || "").replace(/\\u0026/gi, "&").replace(/\\\//g, "/");
+  const add = (raw) => {
+    const url = fullMediaUrl(raw, base);
+    if (!url || !fullIsDirectMediaUrl(url) || seen.has(url)) return;
+    seen.add(url); result.push(url);
+  };
+  const patterns = [
+    /(?:(?:https?:)?\/\/)[^"'\\\s<>]+(?:\.(?:m3u8|mp4|mkv|webm)(?:[?#][^"'\\\s<>]*)?|\/(?:hls|playlist|manifest|stream)(?:[/?#][^"'\\\s<>]*)?)/gi,
+    /(?:file|src|source|url|contentUrl|hls|playlist|video_url|video-url|stream_url|data-video_url|data-source)\s*["']?\s*[:=]\s*["']([^"']+)["']/gi,
+    /(?:data-(?:src|url|file|video|video_url|video-url|stream|source)|data-litespeed-src)\s*=\s*["']([^"']+)["']/gi
+  ];
+  for (const pattern of patterns) {
+    let match; while ((match = pattern.exec(text)) !== null) add(match[1] || match[0]);
   }
   return result;
 }
+
+function collectFallbackEmbeds(html, base) {
+  const result = [], seen = /* @__PURE__ */ new Set();
+  const source = String(html || "").replace(/\\u0026/gi, "&").replace(/\\\//g, "/");
+  const add = (raw) => {
+    const url = fullMediaUrl(raw, base);
+    if (!url || seen.has(url) || isAdMediaUrl(url)) return;
+    if (!fullIsDirectMediaUrl(url) && !fullLikelyEmbedUrl(url)) return;
+    seen.add(url); result.push({ encoded: "", url, label: "Embed", language: "Türkçe" });
+  };
+  const patterns = [
+    /(?:data-src|data-url|data-video_url|data-video-url|data-source|data-file|src|contentUrl)\s*=\s*["']([^"']+)["']/gi,
+    /(?:(?:https?:)?\/\/)[^"'\\\s<>]+(?:\.(?:m3u8|mp4|mkv|webm)(?:[?#][^"'\\\s<>]*)?|\/(?:hls|playlist|manifest|stream)(?:[/?#][^"'\\\s<>]*)?)/gi
+  ];
+  for (const re of patterns) {
+    let match; while ((match = re.exec(source)) !== null) add(match[1] || match[0]);
+  }
+  return result;
+}
+
 function resolvePage(row, pageUrl, domain) {
-  return __async(this, null, function* () {
+  return __async(this, arguments, function* () {
     const html = yield requestText(pageUrl, { headers: { Referer: domain + "/" } });
     let entries = flattenScx(extractScx(html));
-    if (!entries.length)
-      entries = collectFallbackEmbeds(html);
-    if (!entries.length)
-      return [];
+    if (!entries.length) entries = collectFallbackEmbeds(html, pageUrl);
+    if (!entries.length) return [];
     const streams = [], seen = /* @__PURE__ */ new Set();
-    for (const entry of entries.slice(0, 6)) {
-      const embedUrl = entry.url || decodeScxLink(entry.encoded);
-      if (!/^https?:\/\//i.test(embedUrl) || isAdMediaUrl(embedUrl))
-        continue;
+    for (const entry of entries.slice(0, 10)) {
+      const embedUrl = fullMediaUrl(entry.url || decodeScxLink(entry.encoded), pageUrl);
+      if (!/^https?:\/\//i.test(embedUrl) || isAdMediaUrl(embedUrl)) continue;
       let resolved;
       try {
-        resolved = yield extractHost(embedUrl, pageUrl);
-      } catch (e) {
-        resolved = [];
-      }
-      const candidates = [];
-      const candidateSeen = /* @__PURE__ */ new Set();
+        if (fullIsDirectMediaUrl(embedUrl) && !fullLikelyEmbedUrl(embedUrl)) {
+          resolved = [{ url: embedUrl, host: (new URL(embedUrl)).hostname.split(".")[0],
+            type: fullIsHlsUrl(embedUrl) ? "m3u8" : "mp4", headers: { Referer: pageUrl }, subtitles: [] }];
+        } else {
+          resolved = yield extractHost(embedUrl, pageUrl);
+        }
+      } catch (e) { resolved = []; }
+      const candidates = [], candidateSeen = /* @__PURE__ */ new Set();
       for (const stream of resolved || []) {
         const streamUrl = String(stream && stream.url || "");
-        if (!/^https?:\/\//i.test(streamUrl) || isAdMediaUrl(streamUrl) || candidateSeen.has(streamUrl))
-          continue;
-        candidateSeen.add(streamUrl);
-        candidates.push({ stream, url: streamUrl });
+        if (!/^https?:\/\//i.test(streamUrl) || isAdMediaUrl(streamUrl) || candidateSeen.has(streamUrl)) continue;
+        candidateSeen.add(streamUrl); candidates.push({ stream, url: streamUrl });
       }
       const decisions = yield Promise.all(candidates.map((candidate) => fullHdProbeMediaUrl(candidate.url, pageUrl)));
       for (let index = 0; index < candidates.length; index++) {
-        if (decisions[index] !== true)
-          continue;
-        const stream = candidates[index].stream;
-        const streamUrl = candidates[index].url;
-        if (seen.has(streamUrl))
-          continue;
+        if (decisions[index] !== true) continue;
+        const stream = candidates[index].stream, streamUrl = candidates[index].url;
+        if (seen.has(streamUrl)) continue;
         seen.add(streamUrl);
         const subtitles = Array.isArray(stream.subtitles) ? stream.subtitles : [];
         streams.push({
           url: ensureHlsExtHint(streamUrl),
-          type: stream.type || (/\.m3u8/i.test(streamUrl) ? "m3u8" : "mp4"),
-          quality: stream.quality || "Auto",
-          headers: stream.headers || {},
-          subtitles,
+          type: stream.type || (fullIsHlsUrl(streamUrl) ? "m3u8" : "mp4"),
+          quality: stream.quality || "Auto", headers: stream.headers || {}, subtitles,
           name: "FullHDFilmizlesene " + entry.language + (entry.part ? " • Part " + entry.part : "") + " • " + (stream.host || "Kaynak")
         });
       }
@@ -1304,6 +1377,7 @@ function resolvePage(row, pageUrl, domain) {
     return streams;
   });
 }
+
 function resolveTarget(tmdbId, mediaType) {
   return __async(this, null, function* () {
     if (mediaType !== "movie")

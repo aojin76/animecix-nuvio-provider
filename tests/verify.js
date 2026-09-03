@@ -10,7 +10,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const manifest = JSON.parse(read("manifest.json"));
 const packageJson = JSON.parse(read("package.json"));
 
-assert.equal(manifest.version, "2.12.3");
+assert.equal(manifest.version, "2.12.4");
 assert.equal(packageJson.version, manifest.version);
 assert.equal(packageJson.engines && packageJson.engines.node, ">=24");
 assert.ok(Array.isArray(manifest.scrapers) && manifest.scrapers.length > 0);
@@ -70,23 +70,23 @@ for (const entry of Object.values(domainRegistry.providers || {})) {
   assert.ok(entry.allowedHost);
 }
 
-assert.match(read("providers/hdfilmcehennemi-1.0.6.js"), /SEARCH_TIMEOUT_MS = 5e3/);
-assert.match(read("providers/hdfilmcehennemi-1.0.6.js"), /firstSuccessful\(tasks\)/);
-assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /AD_MEDIA_URL_RE/);
-assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /fullHdProbeMediaUrl/);
-assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /TMDB API Anahtarı \(gerekli\)/);
-assert.match(read("providers/fullhdfilmizlesenow-1.0.1.js"), /decisions\[index\] !== true/);
+assert.match(read("providers/hdfilmcehennemi-1.0.7.js"), /SEARCH_TIMEOUT_MS = 5e3/);
+assert.match(read("providers/hdfilmcehennemi-1.0.7.js"), /firstSuccessful\(tasks\)/);
+assert.match(read("providers/fullhdfilmizlesenow-1.0.2.js"), /AD_MEDIA_URL_RE/);
+assert.match(read("providers/fullhdfilmizlesenow-1.0.2.js"), /fullHdProbeMediaUrl/);
+assert.match(read("providers/fullhdfilmizlesenow-1.0.2.js"), /TMDB API Anahtarı \(opsiyonel\)/);
+assert.match(read("providers/fullhdfilmizlesenow-1.0.2.js"), /decisions\[index\] !== true/);
 assert.match(read("providers/dizibox-1.0.5.js"), /PROVIDER_VERSION = "1.0.5"/);
 assert.match(read("providers/dizibox-1.0.5.js"), /reklam\|reklamlar/);
 assert.match(read("providers/dizibox-1.0.5.js"), /keep: decision === true/);
 assert.match(read("providers/animelercc-1.0.8.js"), /playerTypeForUrl/);
 assert.ok(read("providers/animelercc-1.0.8.js").includes("application/vnd.apple.mpegurl"));
 assert.ok(manifest.scrapers.find((scraper) => scraper.id === "animelercc").formats.includes("m3u8"));
-assert.match(read("providers/filmmakinesi-1.0.0.js"), /SITE_ID = "filmmakinesi"/);
-assert.match(read("providers/filmmakinesi-1.0.0.js"), /decisions\[i\] !== true/);
-assert.match(read("providers/720izle-1.0.0.js"), /hotAesDecrypt/);
-assert.match(read("providers/720izle-1.0.0.js"), /hlsLooksLikeLongMedia/);
-assert.match(read("providers/720izle-1.0.0.js"), /decisions\[i\] !== true/);
+assert.match(read("providers/filmmakinesi-1.0.1.js"), /SITE_ID = "filmmakinesi"/);
+assert.match(read("providers/filmmakinesi-1.0.1.js"), /decisions\[i\] !== true/);
+assert.match(read("providers/720izle-1.0.1.js"), /hotAesDecrypt/);
+assert.match(read("providers/720izle-1.0.1.js"), /hlsLooksLikeLongMedia/);
+assert.match(read("providers/720izle-1.0.1.js"), /decisions\[i\] !== true/);
 
 
 const animecixSource = read("providers/animecix-2.5.2.js");
@@ -124,13 +124,14 @@ const fixtureResponse = (body, options = {}) => {
   };
 };
 
-async function runProviderFixture(filename, fixtureFetch, args) {
+async function runProviderFixture(filename, fixtureFetch, args, globals = {}) {
   const sandbox = {
     module: { exports: {} },
     exports: {},
     console: { log() {}, error() {} },
     fetch: fixtureFetch,
-    SCRAPER_SETTINGS: {},
+    SCRAPER_SETTINGS: globals.SCRAPER_SETTINGS || {},
+    SCRAPER_DOMAIN_REGISTRY_URL: globals.SCRAPER_DOMAIN_REGISTRY_URL,
     setTimeout,
     clearTimeout,
     AbortSignal,
@@ -245,6 +246,9 @@ async function runHdfilmMortalKombatFixture() {
   };
   const fixtureFetch = async (request) => {
     const url = String(request);
+    if (url === "https://www.themoviedb.org/movie/fixture-mortal-kombat-2") {
+      return response('<meta property="og:title" content="Mortal Kombat II (2026)">', { contentType: "text/html" });
+    }
     if (url.startsWith("https://api.themoviedb.org/3/movie/")) {
       return response(JSON.stringify({
         title: "Mortal Kombat 2",
@@ -283,7 +287,7 @@ async function runHdfilmMortalKombatFixture() {
     exports: {},
     console: { log() {}, error() {} },
     fetch: fixtureFetch,
-    SCRAPER_SETTINGS: { tmdbApiKey: "fixture-key" },
+    SCRAPER_SETTINGS: {},
     SCRAPER_DOMAIN_REGISTRY_URL: "https://fixture.test/domains.json",
     setTimeout,
     clearTimeout,
@@ -304,15 +308,65 @@ async function runHdfilmMortalKombatFixture() {
     decodeURIComponent
   };
   sandbox.globalThis = sandbox;
-  vm.runInNewContext(read("providers/hdfilmcehennemi-1.0.6.js"), sandbox, {
-    filename: "providers/hdfilmcehennemi-1.0.6.js"
+  vm.runInNewContext(read("providers/hdfilmcehennemi-1.0.7.js"), sandbox, {
+    filename: "providers/hdfilmcehennemi-1.0.7.js"
   });
   const streams = await sandbox.module.exports.getStreams("fixture-mortal-kombat-2", "movie");
   assert.equal(streams.length, 1, "HDFilm Roman numeral title fixture should resolve");
   assert.equal(streams[0].url, mediaUrl);
 }
 
-Promise.all([runHdfilmMortalKombatFixture(), runAnimeTybwFixture()]).then(() => {
+
+
+async function runFilmProviderFixtures() {
+  const tmdbPage = "https://www.themoviedb.org/movie/fixture-film-provider";
+  const media = {
+    fm: "https://media.fixture.test/hls/filmmakinesi?token=1",
+    iz: "https://media.fixture.test/hls/720izle?token=1",
+    full: "https://media.fixture.test/hls/fullhdfilmizlesene?token=1"
+  };
+  const registryUrl = "https://fixture.test/domains.json";
+  const registry = {
+    providers: {
+      filmmakinesi: { domains: ["https://filmmakinesi.to"] },
+      "720izle": { domains: ["https://720izle.com"] },
+      fullhdfilmizlesenow: { domains: ["https://www.fullhdfilmizlesene.now"] }
+    }
+  };
+  const response = (body, status = 200) => fixtureResponse(body, { status });
+  const fixtureFetch = async (request) => {
+    const url = String(request);
+    if (url === tmdbPage)
+      return response('<meta property="og:title" content="Mortal Kombat II (2026)">');
+    if (url === registryUrl)
+      return response(registry);
+    if (url === "https://filmmakinesi.to/film/mortal-kombat-ii-2026/")
+      return response('<div data-video_url="' + media.fm + '"></div>');
+    if (url === "https://720izle.com/filmler11/mortal-kombat-ii-2026/")
+      return response('<div data-video_url="' + media.iz + '"></div>');
+    if (url.startsWith("https://www.fullhdfilmizlesene.now/autocomplete/q.php?q="))
+      return response([{ dizilink: "mortal-kombat-ii-2026", baslik: "Mortal Kombat II", prefix: "film", yil: "2026" }]);
+    if (url === "https://www.fullhdfilmizlesene.now/film/mortal-kombat-ii-2026")
+      return response('<div data-video_url="' + media.full + '"></div>');
+    if (url === media.fm || url === media.iz || url === media.full)
+      return response("#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:60,\nsegment.ts\n#EXT-X-ENDLIST");
+    return response("", 404);
+  };
+  const globals = { SCRAPER_DOMAIN_REGISTRY_URL: registryUrl };
+  const [fm, iz, full] = await Promise.all([
+    runProviderFixture("providers/filmmakinesi-1.0.1.js", fixtureFetch, ["fixture-film-provider", "movie"], globals),
+    runProviderFixture("providers/720izle-1.0.1.js", fixtureFetch, ["fixture-film-provider", "movie"], globals),
+    runProviderFixture("providers/fullhdfilmizlesenow-1.0.2.js", fixtureFetch, ["fixture-film-provider", "movie"], globals)
+  ]);
+  assert.equal(fm.length, 1, "FilmMakinesi direct HLS fixture should resolve");
+  assert.equal(iz.length, 1, "720izle direct HLS fixture should resolve");
+  assert.equal(full.length, 1, "FullHDFilmizlesene direct HLS fixture should resolve");
+  assert.equal(fm[0].url, media.fm + "&ext=video.m3u8");
+  assert.equal(iz[0].url, media.iz + "&ext=video.m3u8");
+  assert.equal(full[0].url, media.full + "&ext=video.m3u8");
+}
+
+Promise.all([runHdfilmMortalKombatFixture(), runAnimeTybwFixture(), runFilmProviderFixtures()]).then(() => {
   console.log("provider verification passed: " + manifest.scrapers.length + " scrapers");
 }).catch((error) => {
   console.error(error);
